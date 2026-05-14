@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.env
+*.log
+
+# Temp render/upload files
+backend/tmp/
+
+# Leftover device frame assets (feature removed)
+backend/src/assets/
+frontend/public/frames/
