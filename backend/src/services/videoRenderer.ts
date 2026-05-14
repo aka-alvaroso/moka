@@ -77,11 +77,10 @@ export async function renderVideo(payload: RenderPayload): Promise<string> {
   videoStream = '[scaled]';
 
   // Rounded corners via alphamerge
+  console.log('[renderVideo] r=%d shadow=%d vidW=%d vidH=%d posX=%d posY=%d', r, content.shadow, vidW, vidH, posX, posY);
   if (r > 0) {
     const maskPath = await buildRoundedMaskPng(vidW, vidH, r);
-    filterParts.push(`${videoStream}[mask]alphamerge[rounded]`);
-    videoStream = '[rounded]';
-    // We'll add mask as input 2
+    console.log('[renderVideo] → runFfmpegRounded, maskPath=', maskPath);
     await runFfmpegRounded({
       bgPath, videoPath: tmpPath(payload.fileId),
       maskPath, outputPath,
@@ -89,6 +88,7 @@ export async function renderVideo(payload: RenderPayload): Promise<string> {
       content, shadowFilter,
     });
   } else {
+    console.log('[renderVideo] → runFfmpegSimple');
     await runFfmpegSimple({
       bgPath, videoPath: tmpPath(payload.fileId),
       outputPath, cw, ch, vidW, vidH, posX, posY, content,
@@ -164,24 +164,20 @@ async function runFfmpegSimple(opts: {
     let filterComplex: string;
 
     if (shadow > 0) {
-      const ox = Math.round(shadow * 12);
-      const oy = Math.round(shadow * 20);
+      const ox   = Math.round(shadow * 12);
+      const oy   = Math.round(shadow * 20);
       const blur = Math.round(shadow * 24);
-      const alpha = Math.round(shadow * 178);
       filterComplex = [
-        // Scale video
-        `[1:v]scale=${vidW}:${vidH}[vid]`,
-        // Create shadow: dark copy, blurred
-        `[vid]format=rgba,colorchannelmixer=aa=${shadow * 0.7}[alpha]`,
-        `[alpha]boxblur=${blur}:${blur}[shadow]`,
-        // Overlay shadow behind video
-        `[0:v][shadow]overlay=${posX + ox}:${posY + oy}[with_shadow]`,
-        // Overlay video on top
-        `[with_shadow][vid]overlay=${posX}:${posY}[out]`,
+        `[1:v]scale=${vidW}:${vidH},format=rgba[vid]`,
+        // split: [v1] → shadow chain, [v2] → final overlay
+        `[vid]split[v1][v2]`,
+        `[v1]colorchannelmixer=aa=${shadow * 0.7},boxblur=${blur}:${blur}[shadow]`,
+        `[0:v][shadow]overlay=${posX + ox}:${posY + oy}[bg]`,
+        `[bg][v2]overlay=${posX}:${posY}[out]`,
       ].join(';');
     } else {
       filterComplex = [
-        `[1:v]scale=${vidW}:${vidH}[vid]`,
+        `[1:v]scale=${vidW}:${vidH},format=rgba[vid]`,
         `[0:v][vid]overlay=${posX}:${posY}[out]`,
       ].join(';');
     }
@@ -198,6 +194,8 @@ async function runFfmpegSimple(opts: {
         '-shortest',
       ])
       .output(outputPath)
+      .on('start', (cmd) => console.log('[ffmpeg cmd]', cmd))
+      .on('stderr', (line) => console.log('[ffmpeg]', line))
       .on('end', () => resolve())
       .on('error', reject)
       .run();
@@ -219,20 +217,19 @@ async function runFfmpegRounded(opts: {
     if (shadow > 0 && shadowFilter) {
       const { offsetX: ox, offsetY: oy, blur, alpha } = shadowFilter;
       filterComplex = [
-        `[1:v]scale=${vidW}:${vidH}[vid]`,
-        // Apply rounded mask
-        `[2:v]scale=${vidW}:${vidH}[mask]`,
+        `[1:v]scale=${vidW}:${vidH},format=rgba[vid]`,
+        `[2:v]scale=${vidW}:${vidH},format=rgba[mask]`,
         `[vid][mask]alphamerge[rounded]`,
-        // Shadow
-        `[rounded]format=rgba,colorchannelmixer=aa=${alpha}[dark]`,
-        `[dark]boxblur=${blur}:${blur}[shadow]`,
-        `[0:v][shadow]overlay=${posX + ox}:${posY + oy}[with_shadow]`,
-        `[with_shadow][rounded]overlay=${posX}:${posY}[out]`,
+        // split: [r1] → shadow chain, [r2] → final overlay
+        `[rounded]split[r1][r2]`,
+        `[r1]colorchannelmixer=aa=${alpha},boxblur=${blur}:${blur}[shadow]`,
+        `[0:v][shadow]overlay=${posX + ox}:${posY + oy}[bg]`,
+        `[bg][r2]overlay=${posX}:${posY}[out]`,
       ].join(';');
     } else {
       filterComplex = [
-        `[1:v]scale=${vidW}:${vidH}[vid]`,
-        `[2:v]scale=${vidW}:${vidH}[mask]`,
+        `[1:v]scale=${vidW}:${vidH},format=rgba[vid]`,
+        `[2:v]scale=${vidW}:${vidH},format=rgba[mask]`,
         `[vid][mask]alphamerge[rounded]`,
         `[0:v][rounded]overlay=${posX}:${posY}[out]`,
       ].join(';');
@@ -254,6 +251,8 @@ async function runFfmpegRounded(opts: {
         '-shortest',
       ])
       .output(outputPath)
+      .on('start', (cmd) => console.log('[ffmpeg-rounded cmd]', cmd))
+      .on('stderr', (line) => console.log('[ffmpeg-rounded]', line))
       .on('end', () => resolve())
       .on('error', reject)
       .run();

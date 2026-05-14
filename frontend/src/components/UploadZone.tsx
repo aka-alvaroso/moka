@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { uploadFile } from '../lib/api';
+import { uploadFile, fetchMediaInfo } from '../lib/api';
 
 interface Props {
   onUploaded: (fileId: string, previewUrl: string, isVideo: boolean, w: number, h: number) => void;
@@ -32,15 +32,24 @@ export function UploadZone({ onUploaded, compact = false }: Props) {
   const onDrop = useCallback(async (accepted: File[]) => {
     const file = accepted[0];
     if (!file) return;
-    const [res, dims] = await Promise.all([
-      uploadFile(file),
-      getImageDimensions(file),
-    ]);
-    // MKV blobs can't be decoded by the browser for preview — use the server URL instead
     const isMkv = file.name.toLowerCase().endsWith('.mkv');
+
+    // Upload first, then resolve dimensions (MKV needs server-side ffprobe)
+    const res = await uploadFile(file);
+
+    let dims: { w: number; h: number };
+    if (isMkv) {
+      const info = await fetchMediaInfo(res.fileId);
+      dims = { w: info.width, h: info.height };
+    } else {
+      dims = await getImageDimensions(file);
+    }
+
+    // MKV can't be decoded by the browser — use the server URL for preview
     const previewUrl = isMkv
       ? `/api/download/${res.fileId}`
       : URL.createObjectURL(file);
+
     onUploaded(res.fileId, previewUrl, res.isVideo, dims.w, dims.h);
   }, [onUploaded]);
 

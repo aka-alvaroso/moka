@@ -192,18 +192,9 @@ export async function renderImage(payload: RenderPayload): Promise<string> {
       .toBuffer();
   }
 
-  // Rotation
+  // Rotation — sharp.rotate() expands the canvas automatically
   let finalW = imgW, finalH = imgH;
   if (content.rotation !== 0) {
-    const angle = (content.rotation * Math.PI) / 180;
-    finalW = Math.ceil(imgW * Math.abs(Math.cos(angle)) + imgH * Math.abs(Math.sin(angle)));
-    finalH = Math.ceil(imgW * Math.abs(Math.sin(angle)) + imgH * Math.abs(Math.cos(angle)));
-    imgBuffer = await sharp({
-      create: { width: finalW, height: finalH, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
-    })
-      .composite([{ input: imgBuffer, left: Math.round((finalW - imgW) / 2), top: Math.round((finalH - imgH) / 2) }])
-      .png()
-      .toBuffer();
     imgBuffer = await sharp(imgBuffer)
       .rotate(content.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
@@ -215,17 +206,33 @@ export async function renderImage(payload: RenderPayload): Promise<string> {
 
   const cx   = Math.round((content.x / 100) * cw);
   const cy   = Math.round((content.y / 100) * ch);
-  const left = cx - Math.round(finalW / 2);
-  const top  = cy - Math.round(finalH / 2);
+  let left = cx - Math.round(finalW / 2);
+  let top  = cy - Math.round(finalH / 2);
+
+  // Clip image to canvas bounds — sharp rejects composites larger than the base
+  if (finalW > cw || finalH > ch || left < 0 || top < 0) {
+    const srcLeft = Math.max(0, -left);
+    const srcTop  = Math.max(0, -top);
+    const clipW   = Math.min(finalW - srcLeft, cw - Math.max(0, left));
+    const clipH   = Math.min(finalH - srcTop,  ch - Math.max(0, top));
+    if (clipW > 0 && clipH > 0) {
+      imgBuffer = await sharp(imgBuffer)
+        .extract({ left: srcLeft, top: srcTop, width: clipW, height: clipH })
+        .png()
+        .toBuffer();
+      left    = Math.max(0, left);
+      top     = Math.max(0, top);
+      finalW  = clipW;
+      finalH  = clipH;
+    }
+  }
 
   const composites: sharp.OverlayOptions[] = [];
   if (content.shadow > 0) {
     const buf = shadowSvgBuffer(finalW, finalH, content.shadow);
-    composites.push({
-      input: buf,
-      left: left + Math.round(content.shadow * 12 * resScale),
-      top:  top  + Math.round(content.shadow * 20 * resScale),
-    });
+    const sLeft = Math.max(0, Math.min(cw - 1, left + Math.round(content.shadow * 12 * resScale)));
+    const sTop  = Math.max(0, Math.min(ch - 1, top  + Math.round(content.shadow * 20 * resScale)));
+    composites.push({ input: buf, left: sLeft, top: sTop });
   }
   composites.push({ input: imgBuffer, left, top });
 

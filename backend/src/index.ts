@@ -4,6 +4,7 @@ import path from 'path';
 import { uploadRouter } from './routes/upload';
 import { renderRouter } from './routes/render';
 import { downloadRouter } from './routes/download';
+import { mediainfoRouter } from './routes/mediainfo';
 import { ensureTmpDir } from './services/fileManager';
 
 const app = express();
@@ -13,8 +14,9 @@ app.use(cors({ origin: 'http://localhost:5173' }));
 app.use(express.json());
 
 app.use('/api/upload', uploadRouter);
-app.use('/api/render', renderRouter);   // POST /api/render
+app.use('/api/render', renderRouter);
 app.use('/api/download', downloadRouter);
+app.use('/api/mediainfo', mediainfoRouter);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 

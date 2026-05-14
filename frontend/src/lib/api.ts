@@ -23,3 +23,9 @@ export async function renderExport(payload: RenderPayload): Promise<RenderRespon
 export function downloadUrl(fileId: string): string {
   return `${BASE}/download/${fileId}`;
 }
+
+export async function fetchMediaInfo(fileId: string): Promise<{ width: number; height: number }> {
+  const res = await fetch(`${BASE}/mediainfo/${fileId}`);
+  if (!res.ok) return { width: 0, height: 0 };
+  return res.json();
+}
