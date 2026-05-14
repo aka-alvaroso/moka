@@ -1,5 +1,7 @@
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
+// @ts-ignore — ffprobe-static has no bundled types
+import ffprobeStatic from 'ffprobe-static';
 import sharp from 'sharp';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -8,6 +10,7 @@ import { makeBackground } from './imageRenderer';
 import type { RenderPayload } from '@mockup-forge/shared';
 
 if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
+if (ffprobeStatic?.path) ffmpeg.setFfprobePath(ffprobeStatic.path);
 
 const CANVAS_SIZES: Record<string, { w: number; h: number }> = {
   '1:1':  { w: 1080, h: 1080 },
@@ -191,7 +194,6 @@ async function runFfmpegSimple(opts: {
         '-crf 20',
         '-preset fast',
         '-pix_fmt yuv420p',
-        `-vf scale=${roundToEven(cw)}:${roundToEven(ch)}`,
         '-movflags +faststart',
         '-shortest',
       ])
@@ -248,7 +250,6 @@ async function runFfmpegRounded(opts: {
         '-crf 20',
         '-preset fast',
         '-pix_fmt yuv420p',
-        `-vf scale=${roundToEven(cw)}:${roundToEven(ch)}`,
         '-movflags +faststart',
         '-shortest',
       ])

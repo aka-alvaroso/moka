@@ -71,15 +71,15 @@ export function ExportButton({ state }: Props) {
       {/* Export button + dropdown */}
       <div className="relative">
         <div className="flex rounded-lg overflow-hidden">
-          {/* Main action — quick export as PNG */}
+          {/* Main action — PNG for images, MP4 for videos */}
           <button
-            onClick={() => trigger('png')}
+            onClick={() => trigger(state.isVideo ? 'mp4' : 'png')}
             disabled={disabled}
             className={`flex items-center gap-1.5 pl-4 pr-2 py-2 text-sm font-semibold transition-all
               ${!disabled ? 'bg-accent hover:bg-accent-hover text-white' : 'bg-surface-3 text-zinc-600 cursor-not-allowed'}`}
           >
             {loading ? <SpinnerIcon /> : <ExportIcon />}
-            {loading ? 'Rendering…' : 'Export'}
+            {loading ? 'Rendering…' : state.isVideo ? 'Export MP4' : 'Export'}
           </button>
 
           {/* Dropdown arrow */}

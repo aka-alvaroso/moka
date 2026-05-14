@@ -20,8 +20,11 @@ const upload = multer({
     const allowed = [
       'image/png', 'image/jpeg', 'image/webp',
       'video/mp4', 'video/quicktime', 'video/webm',
+      'video/x-matroska', 'video/matroska', // .mkv
     ];
-    cb(null, allowed.includes(file.mimetype));
+    // Some browsers/OS report .mkv with a generic mimetype — allow by extension too
+    const ext = file.originalname.split('.').pop()?.toLowerCase();
+    cb(null, allowed.includes(file.mimetype) || ext === 'mkv');
   },
 });
 

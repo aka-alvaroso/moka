@@ -9,10 +9,16 @@ interface Props {
 
 function getImageDimensions(file: File): Promise<{ w: number; h: number }> {
   return new Promise((resolve) => {
+    // MKV is not decodable by the browser — skip dimension detection
+    if (file.name.toLowerCase().endsWith('.mkv')) {
+      resolve({ w: 0, h: 0 });
+      return;
+    }
     const url = URL.createObjectURL(file);
     if (file.type.startsWith('video/')) {
       const v = document.createElement('video');
       v.onloadedmetadata = () => { resolve({ w: v.videoWidth, h: v.videoHeight }); URL.revokeObjectURL(url); };
+      v.onerror = () => { resolve({ w: 0, h: 0 }); URL.revokeObjectURL(url); };
       v.src = url;
     } else {
       const img = new Image();
@@ -30,7 +36,11 @@ export function UploadZone({ onUploaded, compact = false }: Props) {
       uploadFile(file),
       getImageDimensions(file),
     ]);
-    const previewUrl = URL.createObjectURL(file);
+    // MKV blobs can't be decoded by the browser for preview — use the server URL instead
+    const isMkv = file.name.toLowerCase().endsWith('.mkv');
+    const previewUrl = isMkv
+      ? `/api/download/${res.fileId}`
+      : URL.createObjectURL(file);
     onUploaded(res.fileId, previewUrl, res.isVideo, dims.w, dims.h);
   }, [onUploaded]);
 
@@ -38,7 +48,7 @@ export function UploadZone({ onUploaded, compact = false }: Props) {
     onDrop,
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
-      'video/*': ['.mp4', '.mov', '.webm'],
+      'video/*': ['.mp4', '.mov', '.webm', '.mkv'],
     },
     maxFiles: 1,
     maxSize: 200 * 1024 * 1024,
@@ -70,7 +80,7 @@ export function UploadZone({ onUploaded, compact = false }: Props) {
         <p className="text-sm font-medium text-zinc-300">
           {isDragActive ? 'Drop it' : 'Drop image or video'}
         </p>
-        <p className="text-xs text-zinc-600 mt-0.5">PNG · JPG · WebP · MP4 · MOV</p>
+        <p className="text-xs text-zinc-600 mt-0.5">PNG · JPG · WebP · MP4 · MOV · MKV</p>
       </div>
     </div>
   );

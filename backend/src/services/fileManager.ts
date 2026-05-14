@@ -11,7 +11,8 @@ export function ensureTmpDir(): void {
 }
 
 export function tmpPath(filename: string): string {
-  return path.join(TMP_DIR, filename);
+  // Use forward slashes — FFmpeg on Windows rejects backslash paths
+  return path.join(TMP_DIR, filename).replace(/\\/g, '/');
 }
 
 export function cleanOldFiles(maxAgeMs = 60 * 60 * 1000): void {
