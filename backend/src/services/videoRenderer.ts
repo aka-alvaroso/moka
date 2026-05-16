@@ -17,6 +17,7 @@ const CANVAS_SIZES: Record<string, { w: number; h: number }> = {
   '16:9': { w: 1920, h: 1080 },
   '4:5':  { w: 1080, h: 1350 },
   '9:16': { w: 1080, h: 1920 },
+  '4:3':  { w: 1440, h: 1080 },
 };
 
 export async function renderVideo(payload: RenderPayload): Promise<string> {
@@ -56,8 +57,9 @@ export async function renderVideo(payload: RenderPayload): Promise<string> {
   //   - Scale video to vidW×vidH
   //   - Apply rounded corners via vignette (or alphamerge with rounded mask)
   //   - Overlay video on background at posX,posY
-  const r = content.borderRadius > 0
-    ? Math.round(content.borderRadius)
+  const brCfg = content.borderRadius;
+  const r = (brCfg.linked ? brCfg.all : Math.max(brCfg.tl, brCfg.tr, brCfg.br, brCfg.bl)) > 0
+    ? Math.round(brCfg.linked ? brCfg.all : Math.max(brCfg.tl, brCfg.tr, brCfg.br, brCfg.bl))
     : 0;
 
   const outputFilename = `render_${uuidv4()}.mp4`;
@@ -65,8 +67,8 @@ export async function renderVideo(payload: RenderPayload): Promise<string> {
 
   // Build the filter complex
   // [1:v] scale → rounded mask → overlay on [0:v]
-  const shadowFilter = content.shadow > 0
-    ? buildShadowFilter(vidW, vidH, content.shadow, posX, posY)
+  const shadowFilter = content.shadow.opacity > 0
+    ? buildShadowFilter(vidW, vidH, content.shadow.opacity, content.shadow.x, content.shadow.y, content.shadow.blur)
     : null;
 
   const filterParts: string[] = [];
@@ -77,7 +79,7 @@ export async function renderVideo(payload: RenderPayload): Promise<string> {
   videoStream = '[scaled]';
 
   // Rounded corners via alphamerge
-  console.log('[renderVideo] r=%d shadow=%d vidW=%d vidH=%d posX=%d posY=%d', r, content.shadow, vidW, vidH, posX, posY);
+  console.log('[renderVideo] r=%d shadowOpacity=%d vidW=%d vidH=%d posX=%d posY=%d', r, content.shadow.opacity, vidW, vidH, posX, posY);
   if (r > 0) {
     const maskPath = await buildRoundedMaskPng(vidW, vidH, r);
     console.log('[renderVideo] → runFfmpegRounded, maskPath=', maskPath);
@@ -136,14 +138,13 @@ async function buildRoundedMaskPng(w: number, h: number, r: number): Promise<str
 }
 
 function buildShadowFilter(
-  vidW: number, vidH: number, shadowAmt: number,
-  posX: number, posY: number
+  vidW: number, vidH: number, opacity: number, offsetX: number, offsetY: number, blur: number
 ): { offsetX: number; offsetY: number; blur: number; alpha: number } {
   return {
-    offsetX: Math.round(shadowAmt * 12),
-    offsetY: Math.round(shadowAmt * 20),
-    blur: Math.round(shadowAmt * 24),
-    alpha: shadowAmt * 0.7,
+    offsetX: Math.round(offsetX),
+    offsetY: Math.round(offsetY),
+    blur: Math.round(blur / 2),
+    alpha: opacity,
   };
 }
 
@@ -163,15 +164,14 @@ async function runFfmpegSimple(opts: {
     const shadow = content.shadow;
     let filterComplex: string;
 
-    if (shadow > 0) {
-      const ox   = Math.round(shadow * 12);
-      const oy   = Math.round(shadow * 20);
-      const blur = Math.round(shadow * 24);
+    if (shadow.opacity > 0) {
+      const ox   = Math.round(shadow.x);
+      const oy   = Math.round(shadow.y);
+      const blur = Math.round(shadow.blur / 2);
       filterComplex = [
         `[1:v]scale=${vidW}:${vidH},format=rgba[vid]`,
-        // split: [v1] → shadow chain, [v2] → final overlay
         `[vid]split[v1][v2]`,
-        `[v1]colorchannelmixer=aa=${shadow * 0.7},boxblur=${blur}:${blur}[shadow]`,
+        `[v1]colorchannelmixer=aa=${shadow.opacity},boxblur=${blur}:${blur}[shadow]`,
         `[0:v][shadow]overlay=${posX + ox}:${posY + oy}[bg]`,
         `[bg][v2]overlay=${posX}:${posY}[out]`,
       ].join(';');
@@ -214,7 +214,7 @@ async function runFfmpegRounded(opts: {
     const shadow = content.shadow;
     let filterComplex: string;
 
-    if (shadow > 0 && shadowFilter) {
+    if (shadow.opacity > 0 && shadowFilter) {
       const { offsetX: ox, offsetY: oy, blur, alpha } = shadowFilter;
       filterComplex = [
         `[1:v]scale=${vidW}:${vidH},format=rgba[vid]`,

@@ -1,5 +1,5 @@
 export type BackgroundType = 'solid' | 'gradient' | 'mesh' | 'image' | 'transparent';
-export type CanvasRatio    = '1:1' | '16:9' | '4:5' | '9:16' | 'custom';
+export type CanvasRatio    = '1:1' | '16:9' | '4:5' | '9:16' | '4:3' | 'custom';
 export type ExportFormat   = 'png' | 'jpg' | 'mp4';
 
 // ── Mesh ─────────────────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ export interface MeshBlob {
 }
 
 export interface MeshConfig {
-  base: string;       // solid base color hex
+  base: string;
   blobs: MeshBlob[];
 }
 
@@ -26,6 +26,28 @@ export interface Background {
   gradient?: { from: string; to: string; direction: number };
   mesh?: MeshConfig;
   imageFileId?: string;
+}
+
+// ── Shadow ────────────────────────────────────────────────────────────────────
+
+export interface ShadowConfig {
+  color: string;    // hex
+  opacity: number;  // 0–1
+  x: number;        // px offset
+  y: number;        // px offset
+  blur: number;     // px
+  spread: number;   // px
+}
+
+// ── Border radius ─────────────────────────────────────────────────────────────
+
+export interface BorderRadiusConfig {
+  linked: boolean;
+  all: number;
+  tl: number;
+  tr: number;
+  br: number;
+  bl: number;
 }
 
 // ── Canvas / content ──────────────────────────────────────────────────────────
@@ -41,8 +63,8 @@ export interface ContentOptions {
   x: number;
   y: number;
   rotation: number;
-  borderRadius: number;
-  shadow: number;
+  borderRadius: BorderRadiusConfig;
+  shadow: ShadowConfig;
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────

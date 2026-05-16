@@ -9,6 +9,7 @@ const CANVAS_SIZES: Record<string, { w: number; h: number }> = {
   '16:9': { w: 1920, h: 1080 },
   '4:5':  { w: 1080, h: 1350 },
   '9:16': { w: 1080, h: 1920 },
+  '4:3':  { w: 1440, h: 1080 },
 };
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
@@ -141,15 +142,46 @@ export async function makeBackground(
 
 // ── Image render ──────────────────────────────────────────────────────────────
 
-function shadowSvgBuffer(w: number, h: number, amount: number): Buffer {
-  const blur  = Math.round(amount * 48);
-  const alpha = (amount * 0.78).toFixed(3);
-  return Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-      <defs><filter id="b"><feGaussianBlur stdDeviation="${blur}"/></filter></defs>
-      <rect width="${w}" height="${h}" fill="rgba(0,0,0,${alpha})" filter="url(#b)"/>
-    </svg>`
-  );
+// Renders the shadow directly into a canvas-sized buffer placed at (0,0).
+// This avoids all offset-clamping and buffer-size issues.
+async function makeShadowLayer(
+  cw: number, ch: number,
+  imgLeft: number, imgTop: number, imgW: number, imgH: number,
+  color: { r: number; g: number; b: number },
+  opacity: number, blur: number, spread: number,
+  offsetX: number, offsetY: number,
+): Promise<Buffer> {
+  const sw = Math.max(1, imgW + spread * 2);
+  const sh = Math.max(1, imgH + spread * 2);
+  const rl = imgLeft + offsetX - spread;   // rect left on canvas
+  const rt = imgTop  + offsetY - spread;   // rect top  on canvas
+
+  // 1. Paint white rect into a canvas-sized greyscale buffer
+  const grey = Buffer.alloc(cw * ch, 0);
+  const x0 = Math.max(0, rl),  x1 = Math.min(cw, rl + sw);
+  const y0 = Math.max(0, rt),  y1 = Math.min(ch, rt + sh);
+  for (let y = y0; y < y1; y++)
+    for (let x = x0; x < x1; x++)
+      grey[y * cw + x] = 255;
+
+  // 2. Blur the greyscale mask (no RGBA, no transparency artefacts)
+  const sigma = Math.max(0.3, blur / 2);
+  let mask = await sharp(grey, { raw: { width: cw, height: ch, channels: 1 } }).png().toBuffer();
+  if (blur > 0) {
+    mask = await sharp(mask).blur(sigma).png().toBuffer();
+  }
+
+  // 3. Map mask → RGBA using shadow colour + opacity
+  // Force greyscale so data is always 1 byte per pixel
+  const { data } = await sharp(mask).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const rgba = Buffer.alloc(cw * ch * 4);
+  for (let i = 0; i < cw * ch; i++) {
+    rgba[i * 4]     = color.r;
+    rgba[i * 4 + 1] = color.g;
+    rgba[i * 4 + 2] = color.b;
+    rgba[i * 4 + 3] = Math.round((data[i] / 255) * opacity * 255);
+  }
+  return sharp(rgba, { raw: { width: cw, height: ch, channels: 4 } }).png().toBuffer();
 }
 
 export async function renderImage(payload: RenderPayload): Promise<string> {
@@ -179,11 +211,17 @@ export async function renderImage(payload: RenderPayload): Promise<string> {
     .toBuffer();
 
   // Border radius
-  if (content.borderRadius > 0) {
-    const r = Math.round(content.borderRadius * resScale);
+  const brCfg = content.borderRadius;
+  const hasRadius = brCfg.linked ? brCfg.all > 0 : (brCfg.tl + brCfg.tr + brCfg.br + brCfg.bl) > 0;
+  if (hasRadius) {
+    const s = resScale;
+    const tl = Math.round((brCfg.linked ? brCfg.all : brCfg.tl) * s);
+    const tr = Math.round((brCfg.linked ? brCfg.all : brCfg.tr) * s);
+    const br = Math.round((brCfg.linked ? brCfg.all : brCfg.br) * s);
+    const bl = Math.round((brCfg.linked ? brCfg.all : brCfg.bl) * s);
     const mask = Buffer.from(
       `<svg xmlns="http://www.w3.org/2000/svg" width="${imgW}" height="${imgH}">
-         <rect width="${imgW}" height="${imgH}" rx="${r}" ry="${r}" fill="white"/>
+         <path d="M${tl},0 H${imgW - tr} Q${imgW},0 ${imgW},${tr} V${imgH - br} Q${imgW},${imgH} ${imgW - br},${imgH} H${bl} Q0,${imgH} 0,${imgH - bl} V${tl} Q0,0 ${tl},0 Z" fill="white"/>
        </svg>`
     );
     imgBuffer = await sharp(imgBuffer)
@@ -228,11 +266,18 @@ export async function renderImage(payload: RenderPayload): Promise<string> {
   }
 
   const composites: sharp.OverlayOptions[] = [];
-  if (content.shadow > 0) {
-    const buf = shadowSvgBuffer(finalW, finalH, content.shadow);
-    const sLeft = Math.max(0, Math.min(cw - 1, left + Math.round(content.shadow * 12 * resScale)));
-    const sTop  = Math.max(0, Math.min(ch - 1, top  + Math.round(content.shadow * 20 * resScale)));
-    composites.push({ input: buf, left: sLeft, top: sTop });
+  const sh = content.shadow;
+  if (sh.opacity > 0) {
+    const shadowColor = hexToRgb(sh.color);
+    const shadowLayer = await makeShadowLayer(
+      cw, ch, left, top, finalW, finalH,
+      shadowColor, sh.opacity,
+      sh.blur * resScale,
+      Math.round(sh.spread * resScale),
+      Math.round(sh.x * resScale),
+      Math.round(sh.y * resScale),
+    );
+    composites.push({ input: shadowLayer, left: 0, top: 0 });
   }
   composites.push({ input: imgBuffer, left, top });
 

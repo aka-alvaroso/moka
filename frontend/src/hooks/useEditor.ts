@@ -5,7 +5,6 @@ export interface EditorState {
   fileId: string | null;
   previewUrl: string | null;
   isVideo: boolean;
-  // Natural dimensions of the uploaded file (for preview aspect ratio)
   srcW: number;
   srcH: number;
   background: Background;
@@ -20,15 +19,8 @@ const DEFAULT: EditorState = {
   srcW: 1,
   srcH: 1,
   background: {
-    type: 'mesh',
-    mesh: {
-      base: '#0f0c29',
-      blobs: [
-        { id: 'a', x: 20, y: 30, color: '#6366f1', size: 90, opacity: 0.85 },
-        { id: 'b', x: 78, y: 65, color: '#ec4899', size: 75, opacity: 0.75 },
-        { id: 'c', x: 55, y: 85, color: '#3b82f6', size: 65, opacity: 0.65 },
-      ],
-    },
+    type: 'gradient',
+    gradient: { from: '#1a1a2e', to: '#16213e', direction: 135 },
   },
   canvas: { ratio: '1:1' },
   content: {
@@ -36,8 +28,8 @@ const DEFAULT: EditorState = {
     x: 50,
     y: 50,
     rotation: 0,
-    borderRadius: 0,
-    shadow: 0,
+    borderRadius: { linked: true, all: 0, tl: 0, tr: 0, br: 0, bl: 0 },
+    shadow: { color: '#000000', opacity: 0, x: 0, y: 20, blur: 40, spread: 0 },
   },
 };
 
