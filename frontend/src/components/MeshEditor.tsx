@@ -233,26 +233,23 @@ export function MeshEditor({ value, onChange }: Props) {
 
       {/* Selected blob controls */}
       {selectedBlob && (
-        <div className="flex flex-col gap-2.5 p-2.5 bg-surface-2 rounded-xl border border-border">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Blob</span>
-            <button
-              onClick={() => deleteBlob(selectedBlob.id)}
-              className="text-[10px] text-red-400 hover:text-red-300 transition-colors px-1.5 py-0.5 rounded hover:bg-red-500/10"
-            >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px', background: '#0f0f0f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#555' }}>Blob</span>
+            <button onClick={() => deleteBlob(selectedBlob.id)}
+              style={{ fontSize: 10, color: '#e94f37', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 5 }}>
               Delete
             </button>
           </div>
 
-          {/* Color */}
-          <div className="flex items-center gap-2">
-            <label className="relative cursor-pointer shrink-0">
-              <span className="block w-8 h-8 rounded-lg border border-white/10" style={{ background: selectedBlob.color }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#161616', borderRadius: 11, border: '1px solid rgba(255,255,255,0.06)' }}>
+            <span style={{ fontSize: 12, color: '#777', fontWeight: 500 }}>Color</span>
+            <label style={{ position: 'relative', cursor: 'pointer' }}>
+              <span style={{ display: 'block', width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: selectedBlob.color }} />
               <input type="color" value={selectedBlob.color}
                 onChange={(e) => updateBlob(selectedBlob.id, { color: e.target.value })}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
             </label>
-            <span className="text-xs font-mono text-zinc-500 select-all">{selectedBlob.color}</span>
           </div>
 
           <BlobSlider label="Size"    value={selectedBlob.size}    min={15}  max={150} unit="%" onChange={(v) => updateBlob(selectedBlob.id, { size: v })} />
@@ -298,19 +295,60 @@ function BlobSlider({ label, value, min, max, unit, onChange }: {
   label: string; value: number; min: number; max: number; unit: string;
   onChange: (v: number) => void;
 }) {
-  const pct = ((value - min) / (max - min)) * 100;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const DOT_COUNT = 5;
+  const ACCENT = '#e94f37';
+  const ROW_BG = '#161616';
+  const ROW_BORDER = 'rgba(255,255,255,0.06)';
+
+  useEffect(() => { if (editing) inputRef.current?.select(); }, [editing]);
+
+  const commit = () => {
+    setEditing(false);
+    const parsed = parseInt(draft, 10);
+    if (!isNaN(parsed)) onChange(Math.max(min, Math.min(max, parsed)));
+  };
+
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex justify-between">
-        <span className="text-xs text-zinc-400">{label}</span>
-        <span className="text-xs font-mono text-zinc-500">{value}{unit}</span>
+    <div style={{
+      display: 'flex', alignItems: 'stretch', borderRadius: 11, overflow: 'hidden',
+      border: `1px solid ${ROW_BORDER}`, position: 'relative', height: 40,
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', paddingLeft: 12, paddingRight: 10,
+        background: '#121212', borderRight: '1px solid rgba(255,255,255,0.05)',
+        flexShrink: 0, minWidth: 72,
+      }}>
+        <span style={{ fontSize: 12, color: '#666', fontWeight: 500 }}>{label}</span>
       </div>
-      <input
-        type="range" min={min} max={max} value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 rounded-full cursor-pointer appearance-none accent-indigo-500"
-        style={{ background: `linear-gradient(to right,#6366f1 ${pct}%,#2c2c31 0%)` }}
-      />
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: ROW_BG, paddingLeft: 10, paddingRight: 12, gap: 8 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', height: '100%' }}>
+          {Array.from({ length: DOT_COUNT }).map((_, i) => (
+            <div key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,0.13)', flexShrink: 0, pointerEvents: 'none' }} />
+          ))}
+          <input type="range" min={min} max={max} value={value}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="split-slider-track"
+          />
+        </div>
+        {editing ? (
+          <input ref={inputRef} type="text" value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+            onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
+            style={{ width: 44, textAlign: 'right', background: 'transparent', border: 'none', outline: 'none', fontSize: 12, fontFamily: 'monospace', color: '#ddd', padding: 0, position: 'relative', zIndex: 1 }}
+          />
+        ) : (
+          <span
+            onClick={(e) => { e.stopPropagation(); setEditing(true); setDraft(String(value)); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{ fontSize: 12, fontFamily: 'monospace', color: '#bbb', cursor: 'text', minWidth: 36, textAlign: 'right', flexShrink: 0, position: 'relative', zIndex: 1 }}
+          >{value}{unit}</span>
+        )}
+      </div>
     </div>
   );
 }

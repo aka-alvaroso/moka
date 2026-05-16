@@ -1,5 +1,12 @@
 export type BackgroundType = 'solid' | 'gradient' | 'mesh' | 'image' | 'transparent';
-export type CanvasRatio    = '1:1' | '16:9' | '4:5' | '9:16' | '4:3' | 'custom';
+export type CanvasRatio =
+  | '1:1' | '16:9' | '4:5' | '9:16' | '4:3' | 'custom'
+  | 'ig-post' | 'ig-portrait' | 'ig-landscape' | 'ig-story'
+  | 'x-post' | 'x-banner' | 'x-profile'
+  | 'yt-thumbnail' | 'yt-banner'
+  | 'fb-post' | 'fb-cover'
+  | 'li-banner' | 'li-post'
+  | 'profile-pic';
 export type ExportFormat   = 'png' | 'jpg' | 'mp4';
 
 // ── Mesh ─────────────────────────────────────────────────────────────────────

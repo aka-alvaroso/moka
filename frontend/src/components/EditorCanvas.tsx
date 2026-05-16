@@ -9,6 +9,11 @@ const RATIO_MAP: Record<string, number> = {
   '1:1': 1, '16:9': 16 / 9, '4:5': 4 / 5, '9:16': 9 / 16, '4:3': 4 / 3,
 };
 
+function canvasAspectRatio(canvas: { ratio: string; width?: number; height?: number }): number {
+  if (canvas.width && canvas.height) return canvas.width / canvas.height;
+  return RATIO_MAP[canvas.ratio] ?? 1;
+}
+
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
   const r = parseInt(h.substring(0, 2), 16) || 0;
@@ -71,7 +76,7 @@ export function EditorCanvas({ state, onContentChange, onUploaded }: Props) {
 
   useEffect(() => { if (!previewUrl) setSelected(false); }, [previewUrl]);
 
-  const ratio = RATIO_MAP[canvas.ratio] ?? 1;
+  const ratio = canvasAspectRatio(canvas);
   const PAD   = 48;
   const avW   = Math.max(1, container.w - PAD * 2);
   const avH   = Math.max(1, container.h - PAD * 2);
