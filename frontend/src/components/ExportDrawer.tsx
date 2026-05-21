@@ -151,9 +151,10 @@ export function ExportDrawer({ state, open, onClose }: Props) {
                     const mult = r === '1x' ? 1 : r === '2x' ? 2 : 3;
                     const w = base.w * mult;
                     const h = base.h * mult;
+                    const label = r === '1x' ? 'Standard' : r === '2x' ? 'High' : 'Ultra';
                     return (
                       <button key={r} onClick={() => setResolution(r)} style={optionBtnStyle(resolution === r)}>
-                        <span style={{ fontWeight: 700 }}>{r}</span>
+                        <span style={{ fontWeight: 700 }}>{label}</span>
                         <span style={{ fontSize: 9, opacity: 0.6, fontWeight: 400 }}>{w}×{h}</span>
                       </button>
                     );
@@ -178,7 +179,7 @@ export function ExportDrawer({ state, open, onClose }: Props) {
 
               <button onClick={() => trigger(format)} disabled={loading}
                 style={triggerBtnStyle(loading)}>
-                {loading ? 'Rendering…' : `Export ${format.toUpperCase()} @ ${resolution}`}
+                {loading ? 'Rendering…' : `Export ${format.toUpperCase()} - ${resolution === '1x' ? 'Standard' : resolution === '2x' ? 'High' : 'Ultra'}`}
               </button>
 
               {/* Animation export */}
@@ -224,7 +225,7 @@ function optionBtnStyle(active: boolean): React.CSSProperties {
 function triggerBtnStyle(loading: boolean): React.CSSProperties {
   return {
     width: '100%', padding: '11px 0', borderRadius: 12, border: 'none',
-    fontSize: 13, fontWeight: 700, letterSpacing: '0.01em',
+    fontSize: 13, fontWeight: 900, letterSpacing: '0.01em',
     background: ACCENT, color: '#fff',
     cursor: loading ? 'not-allowed' : 'pointer',
     opacity: loading ? 0.6 : 1,

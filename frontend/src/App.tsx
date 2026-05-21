@@ -128,13 +128,13 @@ export default function App() {
               onClick={() => setTimelineOpen((v) => !v)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 28px', borderRadius: 12, fontSize: 13, fontWeight: 700,
+                padding: '10px 28px', borderRadius: 12, fontSize: 13, fontWeight: 900,
                 background: timelineOpen ? '#c73e2b' : ACCENT,
                 border: 'none',
                 color: '#fff',
                 cursor: 'pointer',
                 transition: 'background 0.15s',
-                letterSpacing: '0.02em',
+                letterSpacing: '0.04em',
               }}
             >
               <PlayIcon open={timelineOpen} /> {timelineOpen ? 'Close animation' : 'Animate'}
