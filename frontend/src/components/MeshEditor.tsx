@@ -170,18 +170,20 @@ export function MeshEditor({ value, onChange }: Props) {
   return (
     <div className="flex flex-col gap-3">
 
-      {/* Preset row */}
-      <div className="flex gap-1.5 flex-wrap">
-        {MESH_PRESETS.map((p) => (
+      {/* Preset swatches */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {MESH_PRESETS.map((p, i) => (
           <button
-            key={p.name}
+            key={i}
             onClick={() => { onChange(deepClonePreset(p.config)); setSelectedId(null); }}
-            className="h-6 px-2 rounded text-[10px] font-semibold text-white/80 hover:scale-105 transition-transform"
-            style={{ background: meshToCss(p.config) }}
             title={p.name}
-          >
-            {p.name}
-          </button>
+            style={{
+              width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: meshToCss(p.config),
+              boxShadow: '0 0 0 1px rgba(255,255,255,0.08)',
+              transition: 'box-shadow 0.12s',
+            }}
+          />
         ))}
       </div>
 

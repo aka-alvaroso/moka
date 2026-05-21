@@ -70,8 +70,36 @@ export interface ContentOptions {
   x: number;
   y: number;
   rotation: number;
+  opacity: number;
   borderRadius: BorderRadiusConfig;
   shadow: ShadowConfig;
+}
+
+// ── Animation ─────────────────────────────────────────────────────────────────
+
+export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+
+export interface AnimatedProps {
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  opacity: number;
+  borderRadius: number;
+}
+
+export interface AnimationKeyframe {
+  id: string;
+  time: number;        // seconds from start
+  props: AnimatedProps;
+  easing: EasingType;  // easing FROM this keyframe TO the next
+}
+
+export interface AnimationConfig {
+  enabled: boolean;
+  duration: number;    // seconds
+  fps: 24 | 30 | 60;
+  keyframes: AnimationKeyframe[];
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────

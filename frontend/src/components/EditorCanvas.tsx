@@ -54,10 +54,28 @@ interface Props {
   state: EditorState;
   onContentChange: (patch: Partial<ContentOptions>) => void;
   onUploaded: (fileId: string, previewUrl: string, isVideo: boolean, w: number, h: number) => void;
+  animatedProps?: { x: number; y: number; scale: number; rotation: number; opacity: number; borderRadius: number } | null;
 }
 
-export function EditorCanvas({ state, onContentChange, onUploaded }: Props) {
+export function EditorCanvas({ state, onContentChange, onUploaded, animatedProps }: Props) {
   const { background, canvas, content, previewUrl, isVideo, srcW, srcH } = state;
+
+  // When animation is playing, use interpolated props instead of live content
+  const live = animatedProps ? {
+    ...content,
+    x: animatedProps.x,
+    y: animatedProps.y,
+    scale: animatedProps.scale,
+    rotation: animatedProps.rotation,
+    opacity: animatedProps.opacity,
+    borderRadius: {
+      ...content.borderRadius,
+      linked: true,
+      all: animatedProps.borderRadius,
+      tl: animatedProps.borderRadius, tr: animatedProps.borderRadius,
+      br: animatedProps.borderRadius, bl: animatedProps.borderRadius,
+    },
+  } : content;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef  = useRef<HTMLDivElement>(null);
   const dragRef    = useRef<DragState | null>(null);
@@ -85,18 +103,18 @@ export function EditorCanvas({ state, onContentChange, onUploaded }: Props) {
 
   const shortSide = Math.min(cw, ch) * 0.8;
   const fitScale  = srcW > 0 && srcH > 0 ? Math.min(shortSide / srcW, shortSide / srcH) : 1;
-  const dispW     = Math.max(4, srcW * fitScale * content.scale);
-  const dispH     = Math.max(4, srcH * fitScale * content.scale);
-  const cx        = (content.x / 100) * cw;
-  const cy        = (content.y / 100) * ch;
-  const br        = content.borderRadius;
+  const dispW     = Math.max(4, srcW * fitScale * live.scale);
+  const dispH     = Math.max(4, srcH * fitScale * live.scale);
+  const cx        = (live.x / 100) * cw;
+  const cy        = (live.y / 100) * ch;
+  const br        = live.borderRadius;
   const rVal      = br.linked ? br.all : Math.max(br.tl, br.tr, br.br, br.bl);
   const r         = Math.min(rVal, Math.min(dispW, dispH) / 2);
   const borderRadiusCss = br.linked
     ? `${Math.min(br.all, Math.min(dispW, dispH) / 2)}px`
     : `${Math.min(br.tl, Math.min(dispW, dispH)/2)}px ${Math.min(br.tr, Math.min(dispW, dispH)/2)}px ${Math.min(br.br, Math.min(dispW, dispH)/2)}px ${Math.min(br.bl, Math.min(dispW, dispH)/2)}px`;
 
-  const sh         = content.shadow;
+  const sh         = live.shadow;
   const shadowCss  = sh.opacity > 0
     ? `${sh.x}px ${sh.y}px ${sh.blur}px ${sh.spread}px ${hexToRgba(sh.color, sh.opacity)}`
     : 'none';
@@ -246,11 +264,12 @@ export function EditorCanvas({ state, onContentChange, onUploaded }: Props) {
               style={{
                 position: 'absolute', width: dispW, height: dispH,
                 left: cx, top: cy,
-                transform: `translate(-50%,-50%) rotate(${content.rotation}deg)`,
+                transform: `translate(-50%,-50%) rotate(${live.rotation}deg)`,
                 borderRadius: borderRadiusCss, overflow: 'hidden',
+                opacity: live.opacity,
                 cursor: selected ? 'move' : 'pointer',
                 boxShadow: shadowCss,
-                transition: 'box-shadow 0.15s',
+                transition: animatedProps ? 'none' : 'box-shadow 0.15s',
               }}
               onMouseDown={(e) => { e.stopPropagation(); setSelected(true); if (selected) startDrag('move', e); }}
               onClick={(e) => { e.stopPropagation(); setSelected(true); }}
@@ -263,7 +282,7 @@ export function EditorCanvas({ state, onContentChange, onUploaded }: Props) {
 
             {/* Selection handles */}
             {selected && (
-              <div style={{ position:'absolute', width:dispW, height:dispH, left:cx, top:cy, transform:`translate(-50%,-50%) rotate(${content.rotation}deg)`, pointerEvents:'none' }}>
+              <div style={{ position:'absolute', width:dispW, height:dispH, left:cx, top:cy, transform:`translate(-50%,-50%) rotate(${live.rotation}deg)`, pointerEvents:'none' }}>
                 <div style={{ position:'absolute', inset:0, border:'1.5px solid rgba(99,102,241,0.9)', borderRadius: borderRadiusCss, pointerEvents:'none' }} />
                 <Handle style={{ top:-5, left:-5,   cursor:'nwse-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
                 <Handle style={{ top:-5, right:-5,  cursor:'nesw-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
@@ -279,7 +298,7 @@ export function EditorCanvas({ state, onContentChange, onUploaded }: Props) {
                 {/* Shadow */}
                 <div title="Shadow" style={{ position:'absolute', bottom:-40, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:4, pointerEvents:'auto', cursor:'ew-resize' }} onMouseDown={(e) => startDrag('shadow', e)}>
                   <div style={{ width:1, height:18, background:'rgba(99,102,241,0.6)' }} />
-                  <ShadowIcon active={content.shadow.opacity > 0} />
+                  <ShadowIcon active={live.shadow.opacity > 0} />
                 </div>
               </div>
             )}
@@ -300,28 +319,27 @@ export function EditorCanvas({ state, onContentChange, onUploaded }: Props) {
 
         {/* Empty state — clickable to open file picker */}
         {!previewUrl && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 cursor-pointer" style={{ zIndex: 1 }} onClick={open}>
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4 cursor-pointer"
+            style={{
+              zIndex: 1,
+              border: `2px dashed ${isDragActive ? '#e94f37' : 'rgba(233,79,55,0.35)'}`,
+              borderRadius: 'inherit',
+              transition: 'border-color 0.15s',
+            }}
+            onClick={open}
+          >
             {isDragActive ? (
               <>
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(99,102,241,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/>
-                  <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-                <span className="text-sm text-indigo-400 font-medium">Drop it</span>
+                <img src="/empty_state.svg" style={{ width: 130, height: 'auto', opacity: 1 }} draggable={false} />
+                <span style={{ color: '#e94f37', fontSize: 13, fontWeight: 500 }}>Drop it</span>
               </>
             ) : (
               <>
-                <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-zinc-700 flex items-center justify-center">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#52525b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                </div>
-                <div className="text-center">
-                  <p className="text-sm text-zinc-400 font-medium">Drop image or video</p>
-                  <p className="text-xs text-zinc-600 mt-1">PNG · JPG · WebP · MP4 · MKV</p>
+                <img src="/empty_state.svg" style={{ width: 130, height: 'auto', opacity: 0.7 }} draggable={false} />
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ color: '#e94f37', fontSize: 13, fontWeight: 500, margin: 0 }}>Drop image or video</p>
+                  <p style={{ color: 'rgba(233,79,55,0.6)', fontSize: 11, margin: '4px 0 0' }}>PNG · JPG · WebP · MP4 · MKV</p>
                 </div>
               </>
             )}
@@ -335,6 +353,29 @@ export function EditorCanvas({ state, onContentChange, onUploaded }: Props) {
 function Handle({ style, onMouseDown }: { style: React.CSSProperties; onMouseDown: (e: React.MouseEvent) => void }) {
   return (
     <div onMouseDown={onMouseDown} style={{ position:'absolute', width:10, height:10, background:'white', border:'2px solid #6366f1', borderRadius:2, boxShadow:'0 1px 4px rgba(0,0,0,0.35)', pointerEvents:'auto', ...style }} />
+  );
+}
+
+function StackedFilesIllustration({ color }: { color: string }) {
+  return (
+    <svg width="72" height="80" viewBox="0 0 72 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Back file */}
+      <rect x="18" y="6" width="38" height="48" rx="5" fill={color} opacity="0.5" />
+      <path d="M44 6 L56 6 L56 18 L44 18 Z" fill={color} opacity="0.3" />
+      <path d="M44 6 L44 18 L56 18" stroke={color} strokeWidth="1.5" fill="none" opacity="0.5" />
+      {/* Middle file */}
+      <rect x="11" y="14" width="38" height="48" rx="5" fill={color} opacity="0.65" />
+      <path d="M37 14 L49 14 L49 26 L37 26 Z" fill={color} opacity="0.4" />
+      <path d="M37 14 L37 26 L49 26" stroke={color} strokeWidth="1.5" fill="none" opacity="0.65" />
+      {/* Front file */}
+      <rect x="4" y="22" width="38" height="48" rx="5" fill={color} />
+      <path d="M30 22 L42 22 L42 34 L30 34 Z" fill={color} opacity="0.6" />
+      <path d="M30 22 L30 34 L42 34" stroke={color} strokeWidth="1.5" fill="none" />
+      {/* Lines on front file */}
+      <line x1="12" y1="44" x2="34" y2="44" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+      <line x1="12" y1="51" x2="34" y2="51" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+      <line x1="12" y1="58" x2="26" y2="58" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+    </svg>
   );
 }
 

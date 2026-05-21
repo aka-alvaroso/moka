@@ -294,6 +294,16 @@ export async function renderImage(payload: RenderPayload): Promise<string> {
     );
     composites.push({ input: shadowLayer, left: 0, top: 0 });
   }
+  // Opacity — pre-multiply alpha channel
+  const opacity = typeof content.opacity === 'number' ? content.opacity : 1;
+  if (opacity < 1) {
+    const { data, info } = await sharp(imgBuffer).raw().toBuffer({ resolveWithObject: true });
+    for (let i = 3; i < data.length; i += 4) {
+      data[i] = Math.round(data[i] * opacity);
+    }
+    imgBuffer = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+  }
+
   composites.push({ input: imgBuffer, left, top });
 
   const outputFilename = `render_${uuidv4()}.${format === 'jpg' ? 'jpg' : 'png'}`;

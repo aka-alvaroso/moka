@@ -179,7 +179,7 @@ function MediaSection({ state, onUploaded }: Pick<Props, 'state' | 'onUploaded'>
         style={{
           position: 'relative', borderRadius: 14, overflow: 'hidden',
           height: 88, background: ROW_BG, cursor: 'pointer',
-          border: isDragActive ? `1.5px dashed ${ACCENT}` : `1px solid ${ROW_BORDER}`,
+          border: isDragActive ? `1.5px dashed ${ACCENT}` : `1.5px dashed rgba(255,255,255,0.12)`,
           transition: 'border-color 0.15s',
         }}
       >
@@ -229,20 +229,36 @@ function MediaSection({ state, onUploaded }: Pick<Props, 'state' | 'onUploaded'>
 const BG_TYPES = ['solid', 'gradient', 'mesh', 'image'] as const;
 type BgType = typeof BG_TYPES[number];
 
-const SOLID_PRESETS  = ['#0f0f0f', '#1a1a2e', '#0f172a', '#18181b', '#1e1b4b', '#27272a', '#f8f8f8', '#ffffff'];
+const SOLID_PRESETS = [
+  '#0d0d0d', // near black
+  '#0a0f1e', // deep navy
+  '#1a0a2e', // deep violet
+  '#1a0a0a', // deep crimson
+  '#0a1a0e', // deep forest
+  '#0a1a1a', // deep teal
+  '#1c1c1e', // system dark
+  '#2a1a00', // dark amber
+  '#f5f0eb', // warm white
+  '#f8f8f8', // cool white
+  '#ffffff',  // pure white
+];
 const GRAD_PRESETS: Array<{ from: string; to: string; direction: number }> = [
-  { from: '#1a1a2e', to: '#16213e', direction: 135 },
-  { from: '#0f0c29', to: '#302b63', direction: 135 },
-  { from: '#0f2027', to: '#203a43', direction: 160 },
-  { from: '#141414', to: '#434343', direction: 180 },
-  { from: '#e94f37', to: '#1a1a2e', direction: 135 },
-  { from: '#fc4a1a', to: '#f7b733', direction: 135 },
+  { from: '#0d0221', to: '#5b21b6', direction: 135 }, // dark → vivid purple
+  { from: '#0f0c29', to: '#302b63', direction: 135 }, // deep indigo
+  { from: '#0c1a2e', to: '#0e7490', direction: 160 }, // dark navy → cyan
+  { from: '#141414', to: '#434343', direction: 180 }, // dark gray
+  { from: '#e94f37', to: '#1a1a2e', direction: 135 }, // orange → dark
+  { from: '#fc4a1a', to: '#f7b733', direction: 135 }, // orange → yellow
+  { from: '#0d1117', to: '#1d6fde', direction: 145 }, // dark → blue
+  { from: '#0a0a0a', to: '#e94f37', direction: 160 }, // black → accent
 ];
 const MESH_PRESETS: MeshConfig[] = [
   { base: '#0f0c29', blobs: [{ id: 'a', x: 20, y: 30, color: '#6366f1', size: 90, opacity: 0.85 }, { id: 'b', x: 78, y: 65, color: '#ec4899', size: 75, opacity: 0.75 }] },
   { base: '#000', blobs: [{ id: 'a', x: 30, y: 20, color: '#e94f37', size: 80, opacity: 0.9 }, { id: 'b', x: 70, y: 70, color: '#f97316', size: 70, opacity: 0.8 }] },
   { base: '#001a28', blobs: [{ id: 'a', x: 20, y: 60, color: '#06b6d4', size: 90, opacity: 0.8 }, { id: 'b', x: 80, y: 30, color: '#8b5cf6', size: 80, opacity: 0.75 }] },
   { base: '#0a1628', blobs: [{ id: 'a', x: 25, y: 25, color: '#22d3ee', size: 85, opacity: 0.8 }, { id: 'b', x: 75, y: 75, color: '#6366f1', size: 80, opacity: 0.7 }] },
+  { base: '#0a0a0a', blobs: [{ id: 'a', x: 15, y: 70, color: '#10b981', size: 85, opacity: 0.85 }, { id: 'b', x: 80, y: 25, color: '#3b82f6', size: 70, opacity: 0.75 }] },
+  { base: '#1a0010', blobs: [{ id: 'a', x: 60, y: 20, color: '#f43f5e', size: 90, opacity: 0.85 }, { id: 'b', x: 30, y: 75, color: '#fb923c', size: 75, opacity: 0.8 }] },
 ];
 
 function BackgroundSection({ background, onBackground }: { background: Background; onBackground: (b: Background) => void }) {

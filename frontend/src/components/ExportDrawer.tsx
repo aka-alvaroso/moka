@@ -4,14 +4,28 @@ import type { EditorState } from '../hooks/useEditor';
 import type { CanvasRatio, ExportFormat, RenderPayload } from '@mockup-forge/shared';
 
 const CANVAS_SIZES: Record<CanvasRatio, { w: number; h: number }> = {
-  '1:1':  { w: 1080, h: 1080 },
-  '16:9': { w: 1920, h: 1080 },
-  '4:5':  { w: 1080, h: 1350 },
-  '9:16': { w: 1080, h: 1920 },
-  '4:3':  { w: 1440, h: 1080 },
-  'custom': { w: 1080, h: 1080 },
+  '1:1':          { w: 1080, h: 1080 },
+  '16:9':         { w: 1920, h: 1080 },
+  '4:5':          { w: 1080, h: 1350 },
+  '9:16':         { w: 1080, h: 1920 },
+  '4:3':          { w: 1440, h: 1080 },
+  'custom':       { w: 1080, h: 1080 },
+  'ig-post':      { w: 1080, h: 1080 },
+  'ig-portrait':  { w: 1080, h: 1350 },
+  'ig-landscape': { w: 1080, h: 566  },
+  'ig-story':     { w: 1080, h: 1920 },
+  'x-post':       { w: 1600, h: 900  },
+  'x-banner':     { w: 1500, h: 500  },
+  'x-profile':    { w: 400,  h: 400  },
+  'yt-thumbnail': { w: 1280, h: 720  },
+  'yt-banner':    { w: 2560, h: 1440 },
+  'fb-post':      { w: 1200, h: 630  },
+  'fb-cover':     { w: 820,  h: 312  },
+  'li-banner':    { w: 1584, h: 396  },
+  'li-post':      { w: 1200, h: 627  },
+  'profile-pic':  { w: 400,  h: 400  },
 };
-import { renderExport, downloadUrl } from '../lib/api';
+import { renderExport, renderAnimationExport, downloadUrl } from '../lib/api';
 
 const ACCENT = '#e94f37';
 type Resolution = '1x' | '2x' | '3x';
@@ -26,6 +40,8 @@ export function ExportDrawer({ state, open, onClose }: Props) {
   const [resolution, setResolution] = useState<Resolution>('2x');
   const [format, setFormat]         = useState<'png' | 'jpg'>('png');
   const [loading, setLoading]       = useState(false);
+
+  const hasAnimation = state.animation.keyframes.length >= 2;
   const ref = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -56,6 +72,31 @@ export function ExportDrawer({ state, open, onClose }: Props) {
     } catch (err) {
       console.error('Export failed', err);
       alert('Export failed. Check backend logs.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const triggerAnimation = async () => {
+    if (!state.fileId) return;
+    setLoading(true);
+    try {
+      const res = await renderAnimationExport({
+        fileId: state.fileId, background: state.background,
+        canvas: state.canvas, content: state.content,
+        format: 'mp4', resolution: '1x',
+        duration: state.animation.duration,
+        fps: state.animation.fps,
+        keyframes: state.animation.keyframes,
+      });
+      const a = document.createElement('a');
+      a.href = downloadUrl(res.fileId);
+      a.download = 'moka-animation.mp4';
+      a.click();
+      onClose();
+    } catch (err) {
+      console.error('Animation export failed', err);
+      alert('Animation export failed. Check backend logs.');
     } finally {
       setLoading(false);
     }
@@ -139,6 +180,23 @@ export function ExportDrawer({ state, open, onClose }: Props) {
                 style={triggerBtnStyle(loading)}>
                 {loading ? 'Rendering…' : `Export ${format.toUpperCase()} @ ${resolution}`}
               </button>
+
+              {/* Animation export */}
+              {hasAnimation && (
+                <>
+                  <div style={{ borderTop: '1px solid #f0f0f0', margin: '2px 0' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={labelStyle}>Animation</span>
+                    <span style={{ fontSize: 11, color: '#888' }}>
+                      {state.animation.keyframes.length} keyframes · {state.animation.duration}s · {state.animation.fps} fps
+                    </span>
+                  </div>
+                  <button onClick={triggerAnimation} disabled={loading}
+                    style={{ ...triggerBtnStyle(loading), background: '#111' }}>
+                    {loading ? 'Rendering…' : 'Export Animation MP4'}
+                  </button>
+                </>
+              )}
             </>
           )}
         </motion.div>

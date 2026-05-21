@@ -41,8 +41,8 @@ export async function renderVideo(payload: RenderPayload): Promise<string> {
     ? { w: payload.canvas.width || 1080, h: payload.canvas.height || 1080 }
     : CANVAS_SIZES[payload.canvas.ratio] ?? CANVAS_SIZES['1:1'];
 
-  const cw = baseSize.w;
-  const ch = baseSize.h;
+  const cw = roundToEven(baseSize.w);
+  const ch = roundToEven(baseSize.h);
 
   // 1. Get video native dimensions via ffprobe
   const videoMeta = await probeVideo(tmpPath(payload.fileId));
