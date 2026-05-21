@@ -1,20 +1,34 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
 import type { EditorState } from '../hooks/useEditor';
 import type { ContentOptions } from '@mockup-forge/shared';
 import { meshToCss } from './MeshEditor';
+import { uploadFile, fetchMediaInfo } from '../lib/api';
 
 const RATIO_MAP: Record<string, number> = {
-  '1:1': 1, '16:9': 16 / 9, '4:5': 4 / 5, '9:16': 9 / 16,
+  '1:1': 1, '16:9': 16 / 9, '4:5': 4 / 5, '9:16': 9 / 16, '4:3': 4 / 3,
 };
 
-// Snap to center when within this % of canvas
+function canvasAspectRatio(canvas: { ratio: string; width?: number; height?: number }): number {
+  if (canvas.width && canvas.height) return canvas.width / canvas.height;
+  return RATIO_MAP[canvas.ratio] ?? 1;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16) || 0;
+  const g = parseInt(h.substring(2, 4), 16) || 0;
+  const b = parseInt(h.substring(4, 6), 16) || 0;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 const SNAP_THRESHOLD = 2.5;
 
 function backgroundCss(bg: EditorState['background']): React.CSSProperties {
   switch (bg.type) {
     case 'solid': return { background: bg.color || '#1a1a2e' };
     case 'gradient': {
-      const { from, to, direction } = bg.gradient!;
+      const { from = '#1a1a2e', to = '#16213e', direction = 135 } = bg.gradient ?? {};
       return { background: `linear-gradient(${direction}deg,${from},${to})` };
     }
     case 'mesh':
@@ -39,20 +53,37 @@ interface DragState {
 interface Props {
   state: EditorState;
   onContentChange: (patch: Partial<ContentOptions>) => void;
+  onUploaded: (fileId: string, previewUrl: string, isVideo: boolean, w: number, h: number) => void;
+  animatedProps?: { x: number; y: number; scale: number; rotation: number; opacity: number; borderRadius: number } | null;
 }
 
-export function EditorCanvas({ state, onContentChange }: Props) {
+export function EditorCanvas({ state, onContentChange, onUploaded, animatedProps }: Props) {
   const { background, canvas, content, previewUrl, isVideo, srcW, srcH } = state;
+
+  // When animation is playing, use interpolated props instead of live content
+  const live = animatedProps ? {
+    ...content,
+    x: animatedProps.x,
+    y: animatedProps.y,
+    scale: animatedProps.scale,
+    rotation: animatedProps.rotation,
+    opacity: animatedProps.opacity,
+    borderRadius: {
+      ...content.borderRadius,
+      linked: true,
+      all: animatedProps.borderRadius,
+      tl: animatedProps.borderRadius, tr: animatedProps.borderRadius,
+      br: animatedProps.borderRadius, bl: animatedProps.borderRadius,
+    },
+  } : content;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef  = useRef<HTMLDivElement>(null);
   const dragRef    = useRef<DragState | null>(null);
 
-  // container size (the padded area around the canvas)
   const [container, setContainer] = useState({ w: 600, h: 600 });
   const [selected, setSelected]   = useState(false);
   const [guides, setGuides]        = useState({ x: false, y: false });
 
-  // Observe the wrapper (not the canvas) so we know available space
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
@@ -61,26 +92,75 @@ export function EditorCanvas({ state, onContentChange }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Deselect when content is removed
   useEffect(() => { if (!previewUrl) setSelected(false); }, [previewUrl]);
 
-  const ratio = RATIO_MAP[canvas.ratio] ?? 1;
-  const PAD   = 48; // p-6 on each side
+  const ratio = canvasAspectRatio(canvas);
+  const PAD   = 48;
   const avW   = Math.max(1, container.w - PAD * 2);
   const avH   = Math.max(1, container.h - PAD * 2);
-  // Largest rectangle with correct ratio that fits in available space
-  const cw = avW / avH > ratio ? Math.round(avH * ratio) : avW;
-  const ch = Math.round(cw / ratio);
+  const cw    = avW / avH > ratio ? Math.round(avH * ratio) : avW;
+  const ch    = Math.round(cw / ratio);
 
   const shortSide = Math.min(cw, ch) * 0.8;
   const fitScale  = srcW > 0 && srcH > 0 ? Math.min(shortSide / srcW, shortSide / srcH) : 1;
-  const dispW     = Math.max(4, srcW * fitScale * content.scale);
-  const dispH     = Math.max(4, srcH * fitScale * content.scale);
-  const cx        = (content.x / 100) * cw;
-  const cy        = (content.y / 100) * ch;
-  const r         = Math.min(content.borderRadius, Math.min(dispW, dispH) / 2);
+  const dispW     = Math.max(4, srcW * fitScale * live.scale);
+  const dispH     = Math.max(4, srcH * fitScale * live.scale);
+  const cx        = (live.x / 100) * cw;
+  const cy        = (live.y / 100) * ch;
+  const br        = live.borderRadius;
+  const rVal      = br.linked ? br.all : Math.max(br.tl, br.tr, br.br, br.bl);
+  const r         = Math.min(rVal, Math.min(dispW, dispH) / 2);
+  const borderRadiusCss = br.linked
+    ? `${Math.min(br.all, Math.min(dispW, dispH) / 2)}px`
+    : `${Math.min(br.tl, Math.min(dispW, dispH)/2)}px ${Math.min(br.tr, Math.min(dispW, dispH)/2)}px ${Math.min(br.br, Math.min(dispW, dispH)/2)}px ${Math.min(br.bl, Math.min(dispW, dispH)/2)}px`;
 
-  // ── Start drag ──────────────────────────────────────────────────────────────
+  const sh         = live.shadow;
+  const shadowCss  = sh.opacity > 0
+    ? `${sh.x}px ${sh.y}px ${sh.blur}px ${sh.spread}px ${hexToRgba(sh.color, sh.opacity)}`
+    : 'none';
+
+  // ── File drop handler ─────────────────────────────────────────────────────
+  const handleDrop = useCallback(async (accepted: File[]) => {
+    const file = accepted[0];
+    if (!file) return;
+    const isMkv = file.name.toLowerCase().endsWith('.mkv');
+    const res = await uploadFile(file);
+    let dims: { w: number; h: number };
+    if (isMkv) {
+      const info = await fetchMediaInfo(res.fileId);
+      dims = { w: info.width, h: info.height };
+    } else {
+      dims = await new Promise((resolve) => {
+        const url = URL.createObjectURL(file);
+        if (file.type.startsWith('video/')) {
+          const v = document.createElement('video');
+          v.onloadedmetadata = () => { resolve({ w: v.videoWidth, h: v.videoHeight }); URL.revokeObjectURL(url); };
+          v.onerror = () => { resolve({ w: 0, h: 0 }); URL.revokeObjectURL(url); };
+          v.src = url;
+        } else {
+          const img = new Image();
+          img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url); };
+          img.src = url;
+        }
+      });
+    }
+    const localUrl = isMkv ? `/api/download/${res.fileId}` : URL.createObjectURL(file);
+    onUploaded(res.fileId, localUrl, res.isVideo, dims.w, dims.h);
+  }, [onUploaded]);
+
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    onDrop: handleDrop,
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
+      'video/*': ['.mp4', '.mov', '.webm', '.mkv'],
+    },
+    maxFiles: 1,
+    maxSize: 200 * 1024 * 1024,
+    noClick: true,   // we handle click manually on empty state only
+    noKeyboard: true,
+  });
+
+  // ── Start drag ────────────────────────────────────────────────────────────
   const startDrag = useCallback((mode: DragMode, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -96,7 +176,7 @@ export function EditorCanvas({ state, onContentChange }: Props) {
     };
   }, [cx, cy, dispW, dispH, content]);
 
-  // ── Global mouse events ─────────────────────────────────────────────────────
+  // ── Global mouse events ───────────────────────────────────────────────────
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const d = dragRef.current;
@@ -108,45 +188,36 @@ export function EditorCanvas({ state, onContentChange }: Props) {
         const dy = ((e.clientY - d.startMy) / rect.height) * 100;
         let newX = d.startContent.x + dx;
         let newY = d.startContent.y + dy;
-
-        // Snap to center + show guides
         const snapX = Math.abs(newX - 50) < SNAP_THRESHOLD;
         const snapY = Math.abs(newY - 50) < SNAP_THRESHOLD;
         setGuides({ x: snapX, y: snapY });
         if (snapX) newX = 50;
         if (snapY) newY = 50;
-
         onContentChange({
           x: Math.min(130, Math.max(-30, newX)),
           y: Math.min(130, Math.max(-30, newY)),
         });
-      }
-
-      else if (d.mode === 'resize') {
+      } else if (d.mode === 'resize') {
         const newDist = Math.hypot(e.clientX - d.centerX, e.clientY - d.centerY);
         if (d.startDist > 2) {
           onContentChange({ scale: Math.max(0.05, Math.min(6, d.startContent.scale * (newDist / d.startDist))) });
         }
-      }
-
-      else if (d.mode === 'rotate') {
+      } else if (d.mode === 'rotate') {
         const newAngle = Math.atan2(e.clientY - d.centerY, e.clientX - d.centerX) * 180 / Math.PI;
         let rot = d.startContent.rotation + (newAngle - d.startAngle);
         while (rot >  180) rot -= 360;
         while (rot < -180) rot += 360;
         if (Math.abs(rot) < 2) rot = 0;
         onContentChange({ rotation: Math.round(rot * 2) / 2 });
-      }
-
-      else if (d.mode === 'radius') {
+      } else if (d.mode === 'radius') {
         const dx  = -(e.clientX - d.startMx);
         const max = Math.min(d.dispW, d.dispH) / 2;
-        onContentChange({ borderRadius: Math.max(0, Math.min(max, Math.round(d.startContent.borderRadius + dx * 0.6))) });
-      }
-
-      else if (d.mode === 'shadow') {
+        const val = Math.max(0, Math.min(max, Math.round(d.startContent.borderRadius.all + dx * 0.6)));
+        onContentChange({ borderRadius: { ...d.startContent.borderRadius, all: val, tl: val, tr: val, br: val, bl: val } });
+      } else if (d.mode === 'shadow') {
         const dx = e.clientX - d.startMx;
-        onContentChange({ shadow: Math.round(Math.max(0, Math.min(1, d.startContent.shadow + dx / 200)) * 100) / 100 });
+        const opacity = Math.round(Math.max(0, Math.min(1, d.startContent.shadow.opacity + dx / 200)) * 100) / 100;
+        onContentChange({ shadow: { ...d.startContent.shadow, opacity } });
       }
     };
 
@@ -161,20 +232,20 @@ export function EditorCanvas({ state, onContentChange }: Props) {
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [onContentChange]);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div ref={wrapperRef} className="w-full h-full flex items-center justify-center">
       <div
         ref={canvasRef}
-        className="relative overflow-hidden rounded-xl select-none shrink-0"
-        style={{
-          width: cw,
-          height: ch,
-          ...backgroundCss(background),
-        }}
-        // Click on canvas background → deselect
+        className="relative overflow-hidden rounded-xl shrink-0"
+        style={{ width: cw, height: ch, ...backgroundCss(background) }}
         onMouseDown={() => setSelected(false)}
       >
+        {/* Invisible drop target — covers canvas, sits below content */}
+        <div {...getRootProps()} style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+          <input {...getInputProps()} />
+        </div>
+
         {/* BG image */}
         {background.type === 'image' && background.imageFileId && (
           <img src={`/api/download/${background.imageFileId}`}
@@ -182,150 +253,96 @@ export function EditorCanvas({ state, onContentChange }: Props) {
             draggable={false} />
         )}
 
-        {/* ── Snap guides ── */}
-        {guides.x && (
-          <div style={{
-            position: 'absolute', top: 0, bottom: 0,
-            left: '50%', width: 1,
-            background: 'rgba(99,102,241,0.7)',
-            pointerEvents: 'none',
-            boxShadow: '0 0 4px rgba(99,102,241,0.5)',
-          }} />
-        )}
-        {guides.y && (
-          <div style={{
-            position: 'absolute', left: 0, right: 0,
-            top: '50%', height: 1,
-            background: 'rgba(99,102,241,0.7)',
-            pointerEvents: 'none',
-            boxShadow: '0 0 4px rgba(99,102,241,0.5)',
-          }} />
-        )}
+        {/* Snap guides */}
+        {guides.x && <div style={{ position:'absolute', top:0, bottom:0, left:'50%', width:1, background:'rgba(99,102,241,0.7)', pointerEvents:'none', boxShadow:'0 0 4px rgba(99,102,241,0.5)' }} />}
+        {guides.y && <div style={{ position:'absolute', left:0, right:0, top:'50%', height:1, background:'rgba(99,102,241,0.7)', pointerEvents:'none', boxShadow:'0 0 4px rgba(99,102,241,0.5)' }} />}
 
-        {/* ── Content ── */}
+        {/* Content — z-index above the drop overlay */}
         {previewUrl && (
-          <>
-            {/* Media layer — always visible */}
+          <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
             <div
               style={{
-                position: 'absolute',
-                width: dispW, height: dispH,
+                position: 'absolute', width: dispW, height: dispH,
                 left: cx, top: cy,
-                transform: `translate(-50%,-50%) rotate(${content.rotation}deg)`,
-                borderRadius: r,
-                overflow: 'hidden',
+                transform: `translate(-50%,-50%) rotate(${live.rotation}deg)`,
+                borderRadius: borderRadiusCss, overflow: 'hidden',
+                opacity: live.opacity,
                 cursor: selected ? 'move' : 'pointer',
-                boxShadow: content.shadow > 0
-                  ? `0 ${content.shadow * 20}px ${content.shadow * 48}px rgba(0,0,0,${content.shadow * 0.7})`
-                  : 'none',
-                // Subtle hover ring when not selected
-                outline: !selected ? '0px solid transparent' : 'none',
-                transition: 'box-shadow 0.15s',
+                boxShadow: shadowCss,
+                transition: animatedProps ? 'none' : 'box-shadow 0.15s',
               }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                setSelected(true);
-                if (selected) startDrag('move', e);
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelected(true);
-              }}
+              onMouseDown={(e) => { e.stopPropagation(); setSelected(true); if (selected) startDrag('move', e); }}
+              onClick={(e) => { e.stopPropagation(); setSelected(true); }}
             >
-              {isVideo ? (
-                <video src={previewUrl} autoPlay loop muted playsInline
-                  style={{ width:'100%', height:'100%', objectFit:'fill', display:'block' }} draggable={false} />
-              ) : (
-                <img src={previewUrl}
-                  style={{ width:'100%', height:'100%', objectFit:'fill', display:'block' }} draggable={false} />
-              )}
+              {isVideo
+                ? <video src={previewUrl} autoPlay loop muted playsInline style={{ width:'100%', height:'100%', objectFit:'fill', display:'block' }} draggable={false} />
+                : <img src={previewUrl} style={{ width:'100%', height:'100%', objectFit:'fill', display:'block' }} draggable={false} />
+              }
             </div>
 
-            {/* ── Selection + handles — only when selected ── */}
+            {/* Selection handles */}
             {selected && (
-              <div
-                style={{
-                  position: 'absolute',
-                  width: dispW, height: dispH,
-                  left: cx, top: cy,
-                  transform: `translate(-50%,-50%) rotate(${content.rotation}deg)`,
-                  pointerEvents: 'none',
-                }}
-              >
-                {/* Selection border */}
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  border: '1.5px solid rgba(99,102,241,0.9)',
-                  borderRadius: r,
-                  pointerEvents: 'none',
-                }} />
-
-                {/* Corner resize handles */}
-                <Handle style={{ top: -5, left: -5,   cursor: 'nwse-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
-                <Handle style={{ top: -5, right: -5,  cursor: 'nesw-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
-                <Handle style={{ bottom: -5, left: -5,  cursor: 'nesw-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
-                <Handle style={{ bottom: -5, right: -5, cursor: 'nwse-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
-
-                {/* Rotation handle — above top-center */}
-                <div
-                  style={{
-                    position: 'absolute', top: -40, left: '50%',
-                    transform: 'translateX(-50%)',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                    pointerEvents: 'auto', cursor: 'crosshair',
-                  }}
-                  onMouseDown={(e) => startDrag('rotate', e)}
-                >
-                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'white', border: '2px solid #6366f1', boxShadow: '0 2px 6px rgba(0,0,0,0.4)' }} />
-                  <div style={{ width: 1, height: 18, background: 'rgba(99,102,241,0.6)' }} />
+              <div style={{ position:'absolute', width:dispW, height:dispH, left:cx, top:cy, transform:`translate(-50%,-50%) rotate(${live.rotation}deg)`, pointerEvents:'none' }}>
+                <div style={{ position:'absolute', inset:0, border:'1.5px solid rgba(99,102,241,0.9)', borderRadius: borderRadiusCss, pointerEvents:'none' }} />
+                <Handle style={{ top:-5, left:-5,   cursor:'nwse-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
+                <Handle style={{ top:-5, right:-5,  cursor:'nesw-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
+                <Handle style={{ bottom:-5, left:-5,  cursor:'nesw-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
+                <Handle style={{ bottom:-5, right:-5, cursor:'nwse-resize' }} onMouseDown={(e) => startDrag('resize', e)} />
+                {/* Rotation */}
+                <div style={{ position:'absolute', top:-40, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:4, pointerEvents:'auto', cursor:'crosshair' }} onMouseDown={(e) => startDrag('rotate', e)}>
+                  <div style={{ width:12, height:12, borderRadius:'50%', background:'white', border:'2px solid #6366f1', boxShadow:'0 2px 6px rgba(0,0,0,0.4)' }} />
+                  <div style={{ width:1, height:18, background:'rgba(99,102,241,0.6)' }} />
                 </div>
-
-                {/* Border-radius handle — inside top-right corner */}
-                <div
-                  title="Border radius"
-                  style={{
-                    position: 'absolute',
-                    top:   Math.max(6, Math.min(r + 4, dispH / 2 - 10)),
-                    right: Math.max(6, Math.min(r + 4, dispW / 2 - 10)),
-                    width: 10, height: 10, borderRadius: '50%',
-                    background: '#6366f1', border: '2px solid white',
-                    boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-                    pointerEvents: 'auto', cursor: 'col-resize',
-                  }}
-                  onMouseDown={(e) => startDrag('radius', e)}
-                />
-
-                {/* Shadow handle — below bottom-center */}
-                <div
-                  title="Shadow"
-                  style={{
-                    position: 'absolute', bottom: -40, left: '50%',
-                    transform: 'translateX(-50%)',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                    pointerEvents: 'auto', cursor: 'ew-resize',
-                  }}
-                  onMouseDown={(e) => startDrag('shadow', e)}
-                >
-                  <div style={{ width: 1, height: 18, background: 'rgba(99,102,241,0.6)' }} />
-                  <ShadowIcon active={content.shadow > 0} />
+                {/* Border radius */}
+                <div title="Border radius" style={{ position:'absolute', top:Math.max(6,Math.min(r+4,dispH/2-10)), right:Math.max(6,Math.min(r+4,dispW/2-10)), width:10, height:10, borderRadius:'50%', background:'#6366f1', border:'2px solid white', boxShadow:'0 1px 4px rgba(0,0,0,0.4)', pointerEvents:'auto', cursor:'col-resize' }} onMouseDown={(e) => startDrag('radius', e)} />
+                {/* Shadow */}
+                <div title="Shadow" style={{ position:'absolute', bottom:-40, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:4, pointerEvents:'auto', cursor:'ew-resize' }} onMouseDown={(e) => startDrag('shadow', e)}>
+                  <div style={{ width:1, height:18, background:'rgba(99,102,241,0.6)' }} />
+                  <ShadowIcon active={live.shadow.opacity > 0} />
                 </div>
               </div>
             )}
-          </>
+
+            {/* Drag-to-replace overlay */}
+            {isDragActive && (
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.65)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10, pointerEvents:'none' }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span style={{ color:'white', fontSize:13, fontWeight:500 }}>Drop to replace</span>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* Empty state */}
+        {/* Empty state — clickable to open file picker */}
         {!previewUrl && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
-            <div className="w-12 h-12 rounded-xl border-2 border-dashed border-zinc-700 flex items-center justify-center">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="#52525b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-            </div>
-            <span className="text-xs text-zinc-600">Upload an image or video</span>
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4 cursor-pointer"
+            style={{
+              zIndex: 1,
+              border: `2px dashed ${isDragActive ? '#e94f37' : 'rgba(233,79,55,0.35)'}`,
+              borderRadius: 'inherit',
+              transition: 'border-color 0.15s',
+            }}
+            onClick={open}
+          >
+            {isDragActive ? (
+              <>
+                <img src="/empty_state.svg" style={{ width: 130, height: 'auto', opacity: 1 }} draggable={false} />
+                <span style={{ color: '#e94f37', fontSize: 13, fontWeight: 500 }}>Drop it</span>
+              </>
+            ) : (
+              <>
+                <img src="/empty_state.svg" style={{ width: 130, height: 'auto', opacity: 0.7 }} draggable={false} />
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ color: '#e94f37', fontSize: 13, fontWeight: 500, margin: 0 }}>Drop image or video</p>
+                  <p style={{ color: 'rgba(233,79,55,0.6)', fontSize: 11, margin: '4px 0 0' }}>PNG · JPG · WebP · MP4 · MKV</p>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -333,29 +350,38 @@ export function EditorCanvas({ state, onContentChange }: Props) {
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
 function Handle({ style, onMouseDown }: { style: React.CSSProperties; onMouseDown: (e: React.MouseEvent) => void }) {
   return (
-    <div
-      onMouseDown={onMouseDown}
-      style={{
-        position: 'absolute', width: 10, height: 10,
-        background: 'white', border: '2px solid #6366f1', borderRadius: 2,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
-        pointerEvents: 'auto',
-        ...style,
-      }}
-    />
+    <div onMouseDown={onMouseDown} style={{ position:'absolute', width:10, height:10, background:'white', border:'2px solid #6366f1', borderRadius:2, boxShadow:'0 1px 4px rgba(0,0,0,0.35)', pointerEvents:'auto', ...style }} />
+  );
+}
+
+function StackedFilesIllustration({ color }: { color: string }) {
+  return (
+    <svg width="72" height="80" viewBox="0 0 72 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Back file */}
+      <rect x="18" y="6" width="38" height="48" rx="5" fill={color} opacity="0.5" />
+      <path d="M44 6 L56 6 L56 18 L44 18 Z" fill={color} opacity="0.3" />
+      <path d="M44 6 L44 18 L56 18" stroke={color} strokeWidth="1.5" fill="none" opacity="0.5" />
+      {/* Middle file */}
+      <rect x="11" y="14" width="38" height="48" rx="5" fill={color} opacity="0.65" />
+      <path d="M37 14 L49 14 L49 26 L37 26 Z" fill={color} opacity="0.4" />
+      <path d="M37 14 L37 26 L49 26" stroke={color} strokeWidth="1.5" fill="none" opacity="0.65" />
+      {/* Front file */}
+      <rect x="4" y="22" width="38" height="48" rx="5" fill={color} />
+      <path d="M30 22 L42 22 L42 34 L30 34 Z" fill={color} opacity="0.6" />
+      <path d="M30 22 L30 34 L42 34" stroke={color} strokeWidth="1.5" fill="none" />
+      {/* Lines on front file */}
+      <line x1="12" y1="44" x2="34" y2="44" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+      <line x1="12" y1="51" x2="34" y2="51" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+      <line x1="12" y1="58" x2="26" y2="58" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+    </svg>
   );
 }
 
 function ShadowIcon({ active }: { active: boolean }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-      stroke={active ? '#6366f1' : 'rgba(99,102,241,0.5)'}
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }}>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={active ? '#6366f1' : 'rgba(99,102,241,0.5)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }}>
       <circle cx="12" cy="12" r="5"/>
       <line x1="12" y1="1"  x2="12" y2="3"/>  <line x1="12" y1="21" x2="12" y2="23"/>
       <line x1="4.22" y1="4.22"   x2="5.64" y2="5.64"/>
