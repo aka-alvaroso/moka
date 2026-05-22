@@ -6,7 +6,7 @@ export interface AnimationRenderPayload extends RenderPayload {
   keyframes: AnimationKeyframe[];
 }
 
-const BASE = import.meta.env.VITE_API_URL ?? '/api';
+const BASE = import.meta.env.VITE_API_URL ?? `${import.meta.env.BASE_URL}api`;
 
 export async function uploadFile(file: File): Promise<UploadResponse> {
   const form = new FormData();
