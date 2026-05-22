@@ -269,9 +269,7 @@ export function EditorCanvas({ state, onContentChange, onUploaded, animatedProps
                 opacity: live.opacity,
                 cursor: selected ? 'move' : 'pointer',
                 boxShadow: shadowCss,
-                transition: animatedProps
-                  ? 'none'
-                  : 'width 0.18s cubic-bezier(.4,0,.2,1), height 0.18s cubic-bezier(.4,0,.2,1), left 0.18s cubic-bezier(.4,0,.2,1), top 0.18s cubic-bezier(.4,0,.2,1), transform 0.18s cubic-bezier(.4,0,.2,1), border-radius 0.18s cubic-bezier(.4,0,.2,1), opacity 0.18s cubic-bezier(.4,0,.2,1), box-shadow 0.18s cubic-bezier(.4,0,.2,1)',
+                transition: animatedProps ? 'none' : 'box-shadow 0.15s',
               }}
               onMouseDown={(e) => { e.stopPropagation(); setSelected(true); if (selected) startDrag('move', e); }}
               onClick={(e) => { e.stopPropagation(); setSelected(true); }}

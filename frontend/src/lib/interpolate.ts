@@ -23,7 +23,7 @@ export function applyEasing(t: number, easing: EasingType): number {
     case 'ease-in':     return t * t * t;
     case 'ease-out':    return 1 - Math.pow(1 - t, 3);
     case 'ease-in-out': return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    case 'spring':      return Math.min(1, springEasing(t * 6)); // scale t so 1s feels like full spring
+    case 'spring':      return springEasing(t * 6); // scale t so 1s feels like full spring; overshoot is intentional
   }
 }
 
