@@ -77,7 +77,7 @@ export interface ContentOptions {
 
 // ── Animation ─────────────────────────────────────────────────────────────────
 
-export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'spring';
 
 export interface AnimatedProps {
   x: number;

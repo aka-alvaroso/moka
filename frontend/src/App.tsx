@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useEditor } from './hooks/useEditor';
 import { EditorCanvas } from './components/EditorCanvas';
 import { LeftPanel } from './components/LeftPanel';
@@ -13,7 +14,7 @@ const ACCENT = '#e94f37';
 export default function App() {
   const {
     state, setFile, setBackground, setCanvas, setContent, setContentAndKeyframe,
-    setAnimation, addKeyframe, removeKeyframe, updateKeyframeEasing,
+    setAnimation, addKeyframe, removeKeyframe, updateKeyframeEasing, clearKeyframes,
   } = useEditor();
 
   const [exportOpen,    setExportOpen]    = useState(false);
@@ -173,21 +174,32 @@ export default function App() {
         </div>
       </div>
 
-      {/* Timeline bar — collapsible */}
-      {timelineOpen && (
-        <TimelineBar
-          animation={state.animation}
-          currentTime={currentTime}
-          playing={playing}
-          onTimeChange={(t) => { setCurrentTime(t); if (playing) stopPlayback(); }}
-          onScrubStart={() => setScrubbing(true)}
-          onScrubEnd={() => setScrubbing(false)}
-          onPlayToggle={handlePlayToggle}
-          onRemoveKeyframe={removeKeyframe}
-          onUpdateEasing={updateKeyframeEasing}
-          onAnimationChange={setAnimation}
-        />
-      )}
+      {/* Timeline bar — collapsible with animation */}
+      <AnimatePresence>
+        {timelineOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            style={{ overflow: 'hidden', flexShrink: 0 }}
+          >
+            <TimelineBar
+              animation={state.animation}
+              currentTime={currentTime}
+              playing={playing}
+              onTimeChange={(t) => { setCurrentTime(t); if (playing) stopPlayback(); }}
+              onScrubStart={() => setScrubbing(true)}
+              onScrubEnd={() => setScrubbing(false)}
+              onPlayToggle={handlePlayToggle}
+              onRemoveKeyframe={removeKeyframe}
+              onClearKeyframes={clearKeyframes}
+              onUpdateEasing={updateKeyframeEasing}
+              onAnimationChange={setAnimation}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <ExportDrawer state={state} open={exportOpen} onClose={() => setExportOpen(false)} />
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} />

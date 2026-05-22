@@ -132,8 +132,11 @@ export function useEditor() {
       },
     }));
 
+  const clearKeyframes = () =>
+    setState((s) => ({ ...s, animation: { ...s.animation, keyframes: [] } }));
+
   return {
     state, setFile, setBackground, setCanvas, setContent, setContentAndKeyframe,
-    setAnimation, addKeyframe, removeKeyframe, updateKeyframeEasing,
+    setAnimation, addKeyframe, removeKeyframe, updateKeyframeEasing, clearKeyframes,
   };
 }

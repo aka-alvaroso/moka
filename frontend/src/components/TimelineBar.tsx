@@ -11,6 +11,7 @@ const EASING_OPTIONS: { value: EasingType; label: string }[] = [
   { value: 'ease-in',     label: 'Ease In'     },
   { value: 'ease-out',    label: 'Ease Out'    },
   { value: 'ease-in-out', label: 'Ease In-Out' },
+  { value: 'spring',      label: 'Spring'      },
 ];
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
   onTimeChange: (t: number) => void;
   onPlayToggle: () => void;
   onRemoveKeyframe: (id: string) => void;
+  onClearKeyframes: () => void;
   onUpdateEasing: (id: string, easing: EasingType) => void;
   onAnimationChange: (patch: Partial<AnimationConfig>) => void;
   onScrubStart?: () => void;
@@ -29,7 +31,7 @@ interface Props {
 export function TimelineBar({
   animation, currentTime, playing,
   onTimeChange, onPlayToggle,
-  onRemoveKeyframe, onUpdateEasing, onAnimationChange,
+  onRemoveKeyframe, onClearKeyframes, onUpdateEasing, onAnimationChange,
   onScrubStart, onScrubEnd,
 }: Props) {
   const trackRef      = useRef<HTMLDivElement>(null);
@@ -124,6 +126,19 @@ export function TimelineBar({
         </div>
 
         <div style={{ flex: 1 }} />
+
+        {/* Clear all keyframes */}
+        {animation.keyframes.length > 0 && (
+          <button
+            onClick={() => { onClearKeyframes(); setSelectedKf(null); }}
+            title="Clear all keyframes"
+            style={{ ...iconBtnStyle(), color: '#555', fontSize: 10, gap: 4, display: 'flex', alignItems: 'center', padding: '4px 8px', width: 'auto' }}
+          >
+            <TrashIcon /> <span style={{ letterSpacing: '0.04em', fontWeight: 600 }}>Clear all</span>
+          </button>
+        )}
+
+        <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.07)' }} />
 
         {/* Selected keyframe controls */}
         {selectedKeyframe && (

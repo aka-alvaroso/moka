@@ -2,12 +2,28 @@ import type { AnimatedProps, AnimationKeyframe, EasingType } from '@mockup-forge
 
 // ── Easing functions ──────────────────────────────────────────────────────────
 
+// Spring: underdamped oscillation that settles at 1
+// stiffness=180, damping=12 — feels snappy but bouncy
+function springEasing(t: number): number {
+  const stiffness = 180;
+  const damping   = 12;
+  const mass      = 1;
+  const w0        = Math.sqrt(stiffness / mass);
+  const zeta      = damping / (2 * Math.sqrt(stiffness * mass));
+  if (zeta < 1) {
+    const wd = w0 * Math.sqrt(1 - zeta * zeta);
+    return 1 - Math.exp(-zeta * w0 * t) * (Math.cos(wd * t) + (zeta * w0 / wd) * Math.sin(wd * t));
+  }
+  return 1 - Math.exp(-w0 * t) * (1 + w0 * t);
+}
+
 export function applyEasing(t: number, easing: EasingType): number {
   switch (easing) {
     case 'linear':      return t;
     case 'ease-in':     return t * t * t;
     case 'ease-out':    return 1 - Math.pow(1 - t, 3);
     case 'ease-in-out': return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    case 'spring':      return Math.min(1, springEasing(t * 6)); // scale t so 1s feels like full spring
   }
 }
 
