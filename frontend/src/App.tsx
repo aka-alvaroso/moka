@@ -100,7 +100,7 @@ export default function App() {
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
 
         {/* Wordmark */}
-        <img src="/Moka.svg" alt="moka" style={{ position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10, height: 28, pointerEvents: 'none' }} />
+        <img src={`${import.meta.env.BASE_URL}Moka.svg`} alt="moka" style={{ position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10, height: 28, pointerEvents: 'none' }} />
 
         <LeftPanel
           state={state}
