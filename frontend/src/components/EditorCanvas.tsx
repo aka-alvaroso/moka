@@ -331,12 +331,12 @@ export function EditorCanvas({ state, onContentChange, onUploaded, animatedProps
           >
             {isDragActive ? (
               <>
-                <img src="/empty_state.svg" style={{ width: 130, height: 'auto', opacity: 1 }} draggable={false} />
+                <img src="/empty_state.svg" style={{ width: 200, height: 'auto', opacity: 1 }} draggable={false} />
                 <span style={{ color: '#e94f37', fontSize: 13, fontWeight: 500 }}>Drop it</span>
               </>
             ) : (
               <>
-                <img src="/empty_state.svg" style={{ width: 130, height: 'auto', opacity: 0.7 }} draggable={false} />
+                <img src="/empty_state.svg" style={{ width: 200, height: 'auto', opacity: 0.7 }} draggable={false} />
                 <div style={{ textAlign: 'center' }}>
                   <p style={{ color: '#e94f37', fontSize: 13, fontWeight: 500, margin: 0 }}>Drop image or video</p>
                   <p style={{ color: 'rgba(233,79,55,0.6)', fontSize: 11, margin: '4px 0 0' }}>PNG · JPG · WebP · MP4 · MKV</p>

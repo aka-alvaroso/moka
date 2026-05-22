@@ -123,7 +123,7 @@ export async function renderAnimation(payload: AnimationRenderPayload): Promise<
       ])
       .output(outputPath)
       .on('stderr', (line: string) => console.log('[ffmpeg]', line))
-      .on('end', resolve)
+      .on('end', () => resolve())
       .on('error', (err: Error) => { console.error('[ffmpeg error]', err.message); reject(err); })
       .run();
   });
