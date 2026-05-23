@@ -2,67 +2,161 @@ import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   Background, CanvasConfig, ContentOptions,
-  AnimationConfig, AnimationKeyframe, AnimatedProps,
+  AnimationKeyframe, AnimatedProps, MediaItem, EasingType,
 } from '@mockup-forge/shared';
 
 export interface EditorState {
-  fileId: string | null;
-  previewUrl: string | null;
-  isVideo: boolean;
-  srcW: number;
-  srcH: number;
+  mediaItems: MediaItem[];
+  selectedItemId: string | null;
   background: Background;
   canvas: CanvasConfig;
-  content: ContentOptions;
-  animation: AnimationConfig;
+  animationEnabled: boolean;
+  animationDuration: number;
+  animationFps: 24 | 30 | 60;
 }
 
-const DEFAULT_ANIMATION: AnimationConfig = {
-  enabled: false,
-  duration: 3,
-  fps: 30,
-  keyframes: [],
+const DEFAULT_CONTENT: ContentOptions = {
+  scale: 1, x: 50, y: 50, rotation: 0, opacity: 1,
+  borderRadius: { linked: true, all: 0, tl: 0, tr: 0, br: 0, bl: 0 },
+  shadow: { color: '#000000', opacity: 0, x: 0, y: 20, blur: 40, spread: 0 },
 };
 
 const DEFAULT: EditorState = {
-  fileId: null,
-  previewUrl: null,
-  isVideo: false,
-  srcW: 1,
-  srcH: 1,
-  background: {
-    type: 'solid',
-    color: '#0f0f0f',
-  },
+  mediaItems: [],
+  selectedItemId: null,
+  background: { type: 'solid', color: '#0f0f0f' },
   canvas: { ratio: '1:1' },
-  content: {
-    scale: 1,
-    x: 50,
-    y: 50,
-    rotation: 0,
-    opacity: 1,
-    borderRadius: { linked: true, all: 0, tl: 0, tr: 0, br: 0, bl: 0 },
-    shadow: { color: '#000000', opacity: 0, x: 0, y: 20, blur: 40, spread: 0 },
-  },
-  animation: DEFAULT_ANIMATION,
+  animationEnabled: false,
+  animationDuration: 3,
+  animationFps: 30,
 };
 
 export function contentToAnimatedProps(c: ContentOptions): AnimatedProps {
   return {
-    x: c.x,
-    y: c.y,
-    scale: c.scale,
-    rotation: c.rotation,
-    opacity: c.opacity,
-    borderRadius: c.borderRadius.linked ? c.borderRadius.all : Math.round((c.borderRadius.tl + c.borderRadius.tr + c.borderRadius.br + c.borderRadius.bl) / 4),
+    x: c.x, y: c.y, scale: c.scale, rotation: c.rotation, opacity: c.opacity,
+    borderRadius: c.borderRadius.linked
+      ? c.borderRadius.all
+      : Math.round((c.borderRadius.tl + c.borderRadius.tr + c.borderRadius.br + c.borderRadius.bl) / 4),
   };
+}
+
+function updateItem(items: MediaItem[], id: string, updater: (item: MediaItem) => MediaItem): MediaItem[] {
+  return items.map((item) => item.id === id ? updater(item) : item);
 }
 
 export function useEditor() {
   const [state, setState] = useState<EditorState>(DEFAULT);
 
-  const setFile = (fileId: string, previewUrl: string, isVideo: boolean, srcW: number, srcH: number) =>
-    setState((s) => ({ ...s, fileId, previewUrl, isVideo, srcW, srcH }));
+  // ── Media items ─────────────────────────────────────────────────────────────
+
+  const addItem = (
+    fileId: string, previewUrl: string, isVideo: boolean, srcW: number, srcH: number,
+  ) => setState((s) => {
+    const id = uuidv4();
+    const newItem: MediaItem = {
+      id, fileId, previewUrl, isVideo, srcW, srcH,
+      content: { ...DEFAULT_CONTENT },
+      keyframes: [],
+      videoEndBehavior: 'loop',
+      zIndex: s.mediaItems.length,
+    };
+    return { ...s, mediaItems: [...s.mediaItems, newItem], selectedItemId: id };
+  });
+
+  const removeItem = (id: string) => setState((s) => {
+    const remaining = s.mediaItems.filter((i) => i.id !== id);
+    const newSelected = s.selectedItemId === id
+      ? (remaining[remaining.length - 1]?.id ?? null)
+      : s.selectedItemId;
+    return { ...s, mediaItems: remaining, selectedItemId: newSelected };
+  });
+
+  const selectItem = (id: string | null) =>
+    setState((s) => ({ ...s, selectedItemId: id }));
+
+  const reorderItem = (id: string, direction: 'up' | 'down') => setState((s) => {
+    const items = [...s.mediaItems].sort((a, b) => a.zIndex - b.zIndex);
+    const idx = items.findIndex((i) => i.id === id);
+    if (idx === -1) return s;
+    const swapIdx = direction === 'up' ? idx + 1 : idx - 1;
+    if (swapIdx < 0 || swapIdx >= items.length) return s;
+    const updated = items.map((item) => {
+      if (item.id === items[idx].id) return { ...item, zIndex: items[swapIdx].zIndex };
+      if (item.id === items[swapIdx].id) return { ...item, zIndex: items[idx].zIndex };
+      return item;
+    });
+    return { ...s, mediaItems: updated };
+  });
+
+  // ── Item content ────────────────────────────────────────────────────────────
+
+  const setItemContent = (id: string, patch: Partial<ContentOptions>) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, id, (item) => ({
+        ...item, content: { ...item.content, ...patch },
+      })),
+    }));
+
+  const setItemContentAndKeyframe = (id: string, patch: Partial<ContentOptions>, time: number) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, id, (item) => {
+        const newContent = { ...item.content, ...patch };
+        const props = contentToAnimatedProps(newContent);
+        const existing = item.keyframes.find((k) => Math.abs(k.time - time) < 0.01);
+        const keyframes = existing
+          ? item.keyframes.map((k) => k.id === existing.id ? { ...k, props } : k)
+          : [...item.keyframes, { id: uuidv4(), time, props, easing: 'ease-in-out' as const }];
+        return { ...item, content: newContent, keyframes: keyframes.sort((a, b) => a.time - b.time) };
+      }),
+    }));
+
+  const setItemVideoEndBehavior = (id: string, behavior: MediaItem['videoEndBehavior']) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, id, (item) => ({ ...item, videoEndBehavior: behavior })),
+    }));
+
+  // ── Keyframes ───────────────────────────────────────────────────────────────
+
+  const addKeyframe = (itemId: string, time: number) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, itemId, (item) => {
+        const props = contentToAnimatedProps(item.content);
+        const existing = item.keyframes.find((k) => Math.abs(k.time - time) < 0.01);
+        if (existing) {
+          return { ...item, keyframes: item.keyframes.map((k) => k.id === existing.id ? { ...k, props } : k).sort((a, b) => a.time - b.time) };
+        }
+        const kf: AnimationKeyframe = { id: uuidv4(), time, props, easing: 'ease-in-out' };
+        return { ...item, keyframes: [...item.keyframes, kf].sort((a, b) => a.time - b.time) };
+      }),
+    }));
+
+  const removeKeyframe = (itemId: string, kfId: string) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, itemId, (item) => ({
+        ...item, keyframes: item.keyframes.filter((k) => k.id !== kfId),
+      })),
+    }));
+
+  const updateKeyframeEasing = (itemId: string, kfId: string, easing: EasingType) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, itemId, (item) => ({
+        ...item, keyframes: item.keyframes.map((k) => k.id === kfId ? { ...k, easing } : k),
+      })),
+    }));
+
+  const clearKeyframes = (itemId: string) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, itemId, (item) => ({ ...item, keyframes: [] })),
+    }));
+
+  // ── Global settings ─────────────────────────────────────────────────────────
 
   const setBackground = (background: Background) =>
     setState((s) => ({ ...s, background }));
@@ -70,73 +164,14 @@ export function useEditor() {
   const setCanvas = (canvas: CanvasConfig) =>
     setState((s) => ({ ...s, canvas }));
 
-  const setContent = (patch: Partial<ContentOptions>) =>
-    setState((s) => ({ ...s, content: { ...s.content, ...patch } }));
-
-  // Sets content and immediately snapshots a keyframe at the given time — single atomic update
-  const setContentAndKeyframe = (patch: Partial<ContentOptions>, time: number) =>
-    setState((s) => {
-      const newContent = { ...s.content, ...patch };
-      const props = contentToAnimatedProps(newContent);
-      const existing = s.animation.keyframes.find((k) => Math.abs(k.time - time) < 0.01);
-      const keyframes = existing
-        ? s.animation.keyframes.map((k) => k.id === existing.id ? { ...k, props } : k)
-        : [...s.animation.keyframes, { id: uuidv4(), time, props, easing: 'ease-in-out' as const }];
-      return { ...s, content: newContent, animation: { ...s.animation, keyframes: keyframes.sort((a, b) => a.time - b.time) } };
-    });
-
-  const setAnimation = (patch: Partial<AnimationConfig>) =>
-    setState((s) => ({ ...s, animation: { ...s.animation, ...patch } }));
-
-  const addKeyframe = (time: number) =>
-    setState((s) => {
-      const props = contentToAnimatedProps(s.content);
-      const existing = s.animation.keyframes.find((k) => Math.abs(k.time - time) < 0.01);
-      if (existing) {
-        // Update existing keyframe at this time
-        return {
-          ...s,
-          animation: {
-            ...s.animation,
-            keyframes: s.animation.keyframes
-              .map((k) => k.id === existing.id ? { ...k, props } : k)
-              .sort((a, b) => a.time - b.time),
-          },
-        };
-      }
-      const kf: AnimationKeyframe = { id: uuidv4(), time, props, easing: 'ease-in-out' };
-      return {
-        ...s,
-        animation: {
-          ...s.animation,
-          keyframes: [...s.animation.keyframes, kf].sort((a, b) => a.time - b.time),
-        },
-      };
-    });
-
-  const removeKeyframe = (id: string) =>
-    setState((s) => ({
-      ...s,
-      animation: {
-        ...s.animation,
-        keyframes: s.animation.keyframes.filter((k) => k.id !== id),
-      },
-    }));
-
-  const updateKeyframeEasing = (id: string, easing: AnimationKeyframe['easing']) =>
-    setState((s) => ({
-      ...s,
-      animation: {
-        ...s.animation,
-        keyframes: s.animation.keyframes.map((k) => k.id === id ? { ...k, easing } : k),
-      },
-    }));
-
-  const clearKeyframes = () =>
-    setState((s) => ({ ...s, animation: { ...s.animation, keyframes: [] } }));
+  const setAnimationConfig = (patch: Partial<Pick<EditorState, 'animationEnabled' | 'animationDuration' | 'animationFps'>>) =>
+    setState((s) => ({ ...s, ...patch }));
 
   return {
-    state, setFile, setBackground, setCanvas, setContent, setContentAndKeyframe,
-    setAnimation, addKeyframe, removeKeyframe, updateKeyframeEasing, clearKeyframes,
+    state,
+    addItem, removeItem, selectItem, reorderItem,
+    setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
+    addKeyframe, removeKeyframe, updateKeyframeEasing, clearKeyframes,
+    setBackground, setCanvas, setAnimationConfig,
   };
 }

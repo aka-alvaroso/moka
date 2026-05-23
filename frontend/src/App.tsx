@@ -3,32 +3,46 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEditor } from './hooks/useEditor';
 import { EditorCanvas } from './components/EditorCanvas';
 import { LeftPanel } from './components/LeftPanel';
+import { RightPanel } from './components/RightPanel';
 import { ExportDrawer } from './components/ExportDrawer';
 import { LegalModal } from './components/LegalModal';
 import { TimelineBar } from './components/TimelineBar';
 import { interpolateProps } from './lib/interpolate';
-import type { AnimatedProps } from '@mockup-forge/shared';
+import type { AnimatedProps, AnimationConfig } from '@mockup-forge/shared';
 
 const ACCENT = '#e94f37';
 
 export default function App() {
   const {
-    state, setFile, setBackground, setCanvas, setContent, setContentAndKeyframe,
-    setAnimation, addKeyframe, removeKeyframe, updateKeyframeEasing, clearKeyframes,
+    state,
+    addItem, removeItem, selectItem,
+    setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
+    addKeyframe, removeKeyframe, updateKeyframeEasing, clearKeyframes,
+    setBackground, setCanvas, setAnimationConfig,
   } = useEditor();
 
-  const [exportOpen,    setExportOpen]    = useState(false);
-  const [legalPage,     setLegalPage]     = useState<'privacy' | 'terms' | null>(null);
-  const [timelineOpen,  setTimelineOpen]  = useState(false);
-  const [playing,       setPlaying]       = useState(false);
-  const [currentTime,   setCurrentTime]   = useState(0);
-  const [animatedProps, setAnimatedProps] = useState<AnimatedProps | null>(null);
-  const [scrubbing,     setScrubbing]     = useState(false);
+  const [exportOpen,   setExportOpen]   = useState(false);
+  const [legalPage,    setLegalPage]    = useState<'privacy' | 'terms' | null>(null);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [playing,      setPlaying]      = useState(false);
+  const [currentTime,  setCurrentTime]  = useState(0);
+  const [allAnimatedProps, setAllAnimatedProps] = useState<Record<string, AnimatedProps>>({});
+  const [scrubbing,    setScrubbing]    = useState(false);
 
   const rafRef      = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
 
-  // ── Playback loop ─────────────────────────────────────────────────────────
+  const selectedItem = state.mediaItems.find((i) => i.id === state.selectedItemId) ?? null;
+
+  // Computed AnimationConfig for the selected item (for TimelineBar)
+  const animationConfig: AnimationConfig = {
+    enabled: state.animationEnabled,
+    duration: state.animationDuration,
+    fps: state.animationFps,
+    keyframes: selectedItem?.keyframes ?? [],
+  };
+
+  // ── Playback loop ────────────────────────────────────────────────────────────
 
   const stopPlayback = useCallback(() => {
     setPlaying(false);
@@ -37,9 +51,20 @@ export default function App() {
     lastTickRef.current = null;
   }, []);
 
+  const computeAllAnimatedProps = useCallback((time: number) => {
+    const props: Record<string, AnimatedProps> = {};
+    for (const item of state.mediaItems) {
+      if (item.keyframes.length > 0) {
+        const p = interpolateProps(item.keyframes, time);
+        if (p) props[item.id] = p;
+      }
+    }
+    return props;
+  }, [state.mediaItems]);
+
   useEffect(() => {
     if (!playing) {
-      setAnimatedProps(interpolateProps(state.animation.keyframes, currentTime));
+      setAllAnimatedProps(computeAllAnimatedProps(currentTime));
       return;
     }
 
@@ -49,13 +74,13 @@ export default function App() {
 
       setCurrentTime((prev) => {
         const next = prev + delta;
-        if (next >= state.animation.duration) {
+        if (next >= state.animationDuration) {
           stopPlayback();
-          setCurrentTime(state.animation.duration);
-          setAnimatedProps(interpolateProps(state.animation.keyframes, state.animation.duration));
-          return state.animation.duration;
+          setCurrentTime(state.animationDuration);
+          setAllAnimatedProps(computeAllAnimatedProps(state.animationDuration));
+          return state.animationDuration;
         }
-        setAnimatedProps(interpolateProps(state.animation.keyframes, next));
+        setAllAnimatedProps(computeAllAnimatedProps(next));
         return next;
       });
 
@@ -64,62 +89,76 @@ export default function App() {
 
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
-  }, [playing, state.animation.keyframes, state.animation.duration, currentTime, stopPlayback]);
+  }, [playing, state.animationDuration, currentTime, stopPlayback, computeAllAnimatedProps]);
 
-  // Update preview when scrubbing (not playing)
   useEffect(() => {
-    if (!playing) {
-      setAnimatedProps(interpolateProps(state.animation.keyframes, currentTime));
+    if (!playing) setAllAnimatedProps(computeAllAnimatedProps(currentTime));
+  }, [currentTime, playing, computeAllAnimatedProps]);
+
+  useEffect(() => {
+    if (!timelineOpen) {
+      setAllAnimatedProps({});
+      stopPlayback();
+      setCurrentTime(0);
+      setScrubbing(false);
     }
-  }, [currentTime, state.animation.keyframes, playing]);
-
-  // Clear animated props when timeline closed
-  useEffect(() => {
-    if (!timelineOpen) { setAnimatedProps(null); stopPlayback(); setCurrentTime(0); setScrubbing(false); }
   }, [timelineOpen, stopPlayback]);
 
   const handlePlayToggle = () => {
     if (playing) {
       stopPlayback();
     } else {
-      if (currentTime >= state.animation.duration) setCurrentTime(0);
+      if (currentTime >= state.animationDuration) setCurrentTime(0);
       lastTickRef.current = null;
       setPlaying(true);
     }
   };
 
-  const handleContentChange = (patch: Parameters<typeof setContent>[0]) => {
-    if (timelineOpen) setContentAndKeyframe(patch, currentTime);
-    else setContent(patch);
-  };
+  // Content change for an item by id (used by canvas)
+  const handleItemContentChange = useCallback((id: string, patch: Partial<import('@mockup-forge/shared').ContentOptions>) => {
+    if (timelineOpen) setItemContentAndKeyframe(id, patch, currentTime);
+    else setItemContent(id, patch);
+  }, [timelineOpen, currentTime, setItemContent, setItemContentAndKeyframe]);
+
+  // Content change for the selected item (used by right panel)
+  const handleSelectedContentChange = useCallback((patch: Partial<import('@mockup-forge/shared').ContentOptions>) => {
+    if (!state.selectedItemId) return;
+    handleItemContentChange(state.selectedItemId, patch);
+  }, [state.selectedItemId, handleItemContentChange]);
+
+  const isAnimating = playing || scrubbing;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#161616' }}
       className="select-none">
 
-      {/* Main row: panel + preview */}
+      {/* Main row: left panel + canvas + right panel */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
 
         {/* Wordmark */}
-        <img src={`${import.meta.env.BASE_URL}Moka.svg`} alt="moka" style={{ position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10, height: 28, pointerEvents: 'none' }} />
+        <img src={`${import.meta.env.BASE_URL}Moka.svg`} alt="moka"
+          style={{ position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10, height: 28, pointerEvents: 'none' }} />
 
         <LeftPanel
           state={state}
-          onUploaded={setFile}
+          onItemAdded={addItem}
+          onItemRemoved={removeItem}
+          onItemSelected={selectItem}
           onBackground={setBackground}
           onCanvas={setCanvas}
-          onContent={handleContentChange}
           onExport={() => setExportOpen(true)}
         />
 
-        {/* Preview area + footer */}
+        {/* Center: canvas + animate button + footer */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, paddingTop: 18 }}>
           <div style={{ flex: 1, minHeight: 0 }}>
             <EditorCanvas
               state={state}
-              onContentChange={handleContentChange}
-              onUploaded={setFile}
-              animatedProps={(playing || scrubbing) ? animatedProps : null}
+              onItemContentChange={handleItemContentChange}
+              onItemSelected={selectItem}
+              onItemAdded={addItem}
+              allAnimatedProps={isAnimating ? allAnimatedProps : {}}
+              isAnimating={isAnimating}
             />
           </div>
 
@@ -128,27 +167,20 @@ export default function App() {
             <button
               onClick={() => setTimelineOpen((v) => !v)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 28px', borderRadius: 12, fontSize: 13, fontWeight: 900,
+                display: 'flex', alignItems: 'center', gap: 8, padding: '10px 28px',
+                borderRadius: 12, fontSize: 13, fontWeight: 900,
                 background: timelineOpen ? '#c73e2b' : ACCENT,
-                border: 'none',
-                color: '#fff',
-                cursor: 'pointer',
-                transition: 'background 0.15s',
-                letterSpacing: '0.04em',
+                border: 'none', color: '#fff', cursor: 'pointer',
+                transition: 'background 0.15s', letterSpacing: '0.04em',
               }}
             >
-              <PlayIcon open={timelineOpen} /> {timelineOpen ? 'Close animation' : 'Animate'}
+              <PlayIcon open={timelineOpen} />
+              {timelineOpen ? 'Close animation' : 'Animate'}
             </button>
           </div>
 
           {/* Footer */}
-          <footer style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16,
-            padding: '8px 24px', flexShrink: 0,
-            borderTop: '1px solid rgba(255,255,255,0.04)',
-            marginTop: 12,
-          }}>
+          <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '8px 24px', flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: 12 }}>
             <span style={{ fontSize: 11, color: '#333', whiteSpace: 'nowrap' }}>
               Made with <span style={{ color: ACCENT }}>♥</span> by{' '}
               <a href="https://alvaroso.dev" target="_blank" rel="noopener noreferrer"
@@ -172,9 +204,15 @@ export default function App() {
             </span>
           </footer>
         </div>
+
+        <RightPanel
+          item={selectedItem}
+          onContent={handleSelectedContentChange}
+          onVideoEndBehavior={(behavior) => { if (state.selectedItemId) setItemVideoEndBehavior(state.selectedItemId, behavior); }}
+        />
       </div>
 
-      {/* Timeline bar — collapsible with animation */}
+      {/* Timeline bar */}
       <AnimatePresence>
         {timelineOpen && (
           <motion.div
@@ -185,17 +223,17 @@ export default function App() {
             style={{ overflow: 'hidden', flexShrink: 0 }}
           >
             <TimelineBar
-              animation={state.animation}
+              animation={animationConfig}
               currentTime={currentTime}
               playing={playing}
               onTimeChange={(t) => { setCurrentTime(t); if (playing) stopPlayback(); }}
               onScrubStart={() => setScrubbing(true)}
               onScrubEnd={() => setScrubbing(false)}
               onPlayToggle={handlePlayToggle}
-              onRemoveKeyframe={removeKeyframe}
-              onClearKeyframes={clearKeyframes}
-              onUpdateEasing={updateKeyframeEasing}
-              onAnimationChange={setAnimation}
+              onRemoveKeyframe={(kfId) => { if (state.selectedItemId) removeKeyframe(state.selectedItemId, kfId); }}
+              onClearKeyframes={() => { if (state.selectedItemId) clearKeyframes(state.selectedItemId); }}
+              onUpdateEasing={(kfId, easing) => { if (state.selectedItemId) updateKeyframeEasing(state.selectedItemId, kfId, easing); }}
+              onAnimationChange={(patch) => setAnimationConfig({ animationEnabled: patch.enabled, animationDuration: patch.duration, animationFps: patch.fps })}
             />
           </motion.div>
         )}
@@ -209,8 +247,7 @@ export default function App() {
 
 function FooterBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick}
-      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#333', padding: 0, fontSize: 11 }}
+    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#333', padding: 0, fontSize: 11 }}
       onMouseEnter={(e) => (e.currentTarget.style.color = '#666')}
       onMouseLeave={(e) => (e.currentTarget.style.color = '#333')}
     >{children}</button>
@@ -228,8 +265,7 @@ function GitHubIcon() {
 function PlayIcon({ open }: { open: boolean }) {
   return open ? (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-      <rect x="4" y="4" width="5" height="16" rx="1.5"/>
-      <rect x="15" y="4" width="5" height="16" rx="1.5"/>
+      <rect x="4" y="4" width="5" height="16" rx="1.5"/><rect x="15" y="4" width="5" height="16" rx="1.5"/>
     </svg>
   ) : (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">

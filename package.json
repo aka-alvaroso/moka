@@ -5,6 +5,9 @@
     "dev": "concurrently \"pnpm --filter backend dev\" \"pnpm --filter frontend dev\"",
     "build": "pnpm --filter shared build && pnpm --filter backend build && pnpm --filter frontend build"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["puppeteer", "sharp", "ffmpeg-static", "ffprobe-static"]
+  },
   "devDependencies": {
     "concurrently": "^9.1.2"
   }

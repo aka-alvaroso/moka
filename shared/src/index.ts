@@ -8,6 +8,7 @@ export type CanvasRatio =
   | 'li-banner' | 'li-post'
   | 'profile-pic';
 export type ExportFormat   = 'png' | 'jpg' | 'mp4';
+export type VideoEndBehavior = 'loop' | 'freeze' | 'hide';
 
 // ── Mesh ─────────────────────────────────────────────────────────────────────
 
@@ -102,15 +103,68 @@ export interface AnimationConfig {
   keyframes: AnimationKeyframe[];
 }
 
-// ── API ───────────────────────────────────────────────────────────────────────
+// ── Media item ────────────────────────────────────────────────────────────────
 
-export interface RenderPayload {
+export interface MediaItem {
+  id: string;
   fileId: string;
+  previewUrl: string;        // local blob URL or /api/download/fileId
+  isVideo: boolean;
+  srcW: number;
+  srcH: number;
+  content: ContentOptions;
+  keyframes: AnimationKeyframe[];
+  videoEndBehavior: VideoEndBehavior;
+  zIndex: number;
+  name?: string;
+}
+
+// ── Puppeteer render state (stored on backend, fetched by RenderView) ─────────
+
+export interface PuppeteerItem {
+  id: string;
+  fileId: string;
+  isVideo: boolean;
+  srcW: number;
+  srcH: number;
+  content: ContentOptions;
+  zIndex: number;
+}
+
+export interface PuppeteerRenderState {
+  items: PuppeteerItem[];
   background: Background;
   canvas: CanvasConfig;
+  canvasW: number;
+  canvasH: number;
+}
+
+// ── API payloads ──────────────────────────────────────────────────────────────
+
+export interface RenderItem {
+  id: string;
+  fileId: string;
+  isVideo: boolean;
+  srcW: number;
+  srcH: number;
   content: ContentOptions;
+  zIndex: number;
+}
+
+export interface MultiRenderPayload {
+  items: RenderItem[];
+  background: Background;
+  canvas: CanvasConfig;
   format: ExportFormat;
   resolution?: '1x' | '2x' | '3x';
+}
+
+export interface MultiAnimationRenderPayload {
+  items: Array<RenderItem & { keyframes: AnimationKeyframe[] }>;
+  background: Background;
+  canvas: CanvasConfig;
+  duration: number;
+  fps: 24 | 30 | 60;
 }
 
 export interface UploadResponse {
@@ -124,4 +178,15 @@ export interface UploadResponse {
 export interface RenderResponse {
   fileId: string;
   downloadUrl: string;
+}
+
+// ── Legacy (kept for videoRenderer compatibility) ─────────────────────────────
+
+export interface RenderPayload {
+  fileId: string;
+  background: Background;
+  canvas: CanvasConfig;
+  content: ContentOptions;
+  format: ExportFormat;
+  resolution?: '1x' | '2x' | '3x';
 }
