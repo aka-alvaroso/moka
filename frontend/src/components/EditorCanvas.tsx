@@ -305,7 +305,10 @@ function ItemLayer({ item, cw, ch, selected, animatedProps, isAnimating, canvasR
   );
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: item.zIndex + 1 }}>
+    // Wrapper covers full canvas but must NOT intercept pointer events —
+    // only the actual image area and handles should be clickable.
+    // Selected items get a high zIndex so their handles always render on top.
+    <div style={{ position: 'absolute', inset: 0, zIndex: selected ? 9999 : item.zIndex + 1, pointerEvents: 'none' }}>
       <div
         style={{
           position: 'absolute', width: dispW, height: dispH, left: cx, top: cy,
@@ -314,6 +317,7 @@ function ItemLayer({ item, cw, ch, selected, animatedProps, isAnimating, canvasR
           opacity: live.opacity, cursor: selected ? 'move' : 'pointer',
           boxShadow: shadowCss,
           transition: animatedProps ? 'none' : 'box-shadow 0.15s',
+          pointerEvents: 'auto',
         }}
         onMouseDown={(e) => { onSelect(e); startDrag('move', e); }}
       >
