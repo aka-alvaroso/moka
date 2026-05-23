@@ -11,6 +11,10 @@ import { ensureTmpDir } from './services/fileManager';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust Caddy/nginx proxy so express-rate-limit reads the real client IP
+// from X-Forwarded-For instead of crashing
+app.set('trust proxy', 1);
+
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
 app.use(cors({ origin: allowedOrigin }));
