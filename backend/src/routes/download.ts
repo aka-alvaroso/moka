@@ -16,5 +16,5 @@ downloadRouter.get('/:fileId', (req, res) => {
     return;
   }
 
-  res.download(fp);
+  res.sendFile(fp);
 });
