@@ -6,4 +6,5 @@ packages:
 allowBuilds:
   esbuild: true
   ffmpeg-static: true
+  puppeteer: true
   sharp: true

@@ -1,10 +1,6 @@
-import type { UploadResponse, RenderResponse, RenderPayload, AnimationKeyframe } from '@mockup-forge/shared';
-
-export interface AnimationRenderPayload extends RenderPayload {
-  duration: number;
-  fps: 24 | 30 | 60;
-  keyframes: AnimationKeyframe[];
-}
+import type {
+  UploadResponse, RenderResponse, MultiRenderPayload, MultiAnimationRenderPayload,
+} from '@mockup-forge/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? `${import.meta.env.BASE_URL}api`;
 
@@ -16,7 +12,7 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
   return res.json();
 }
 
-export async function renderExport(payload: RenderPayload): Promise<RenderResponse> {
+export async function renderExport(payload: MultiRenderPayload): Promise<RenderResponse> {
   const res = await fetch(`${BASE}/render`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -26,7 +22,7 @@ export async function renderExport(payload: RenderPayload): Promise<RenderRespon
   return res.json();
 }
 
-export async function renderAnimationExport(payload: AnimationRenderPayload): Promise<RenderResponse> {
+export async function renderAnimationExport(payload: MultiAnimationRenderPayload): Promise<RenderResponse> {
   const res = await fetch(`${BASE}/render/animation`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
