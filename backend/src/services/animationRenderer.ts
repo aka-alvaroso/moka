@@ -17,6 +17,17 @@ function applyEasing(t: number, easing: AnimationKeyframe['easing']): number {
     case 'ease-in':     return t * t * t;
     case 'ease-out':    return 1 - Math.pow(1 - t, 3);
     case 'ease-in-out': return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    case 'spring': {
+      const w0   = Math.sqrt(180);
+      const zeta = 12 / (2 * Math.sqrt(180));
+      const s    = t * 6;
+      if (zeta < 1) {
+        const wd = w0 * Math.sqrt(1 - zeta * zeta);
+        return 1 - Math.exp(-zeta * w0 * s) * (Math.cos(wd * s) + (zeta * w0 / wd) * Math.sin(wd * s));
+      }
+      return 1 - Math.exp(-w0 * s) * (1 + w0 * s);
+    }
+    default: return t;
   }
 }
 
