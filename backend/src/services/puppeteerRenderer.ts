@@ -9,9 +9,19 @@ let _browser: Browser | null = null;
 
 async function getBrowser(): Promise<Browser> {
   if (_browser && _browser.connected) return _browser;
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
   _browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+    ...(executablePath ? { executablePath } : {}),
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--ignore-certificate-errors',
+      '--disable-web-security',
+      '--allow-running-insecure-content',
+    ],
   });
   return _browser;
 }
