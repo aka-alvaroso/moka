@@ -39,7 +39,12 @@ export async function screenshotRenderState(
   const page = await browser.newPage();
 
   try {
+    page.on('console', (msg) => console.log(`[puppeteer:${msg.type()}]`, msg.text()));
+    page.on('pageerror', (err) => console.error('[puppeteer:pageerror]', err.message));
+    page.on('requestfailed', (req) => console.error('[puppeteer:requestfailed]', req.url(), req.failure()?.errorText));
+
     await page.setViewport({ width: state.canvasW + 200, height: state.canvasH + 200 });
+    console.log('[puppeteer] navigating to', url);
     await page.goto(url, { waitUntil: 'load', timeout: 30_000 });
     await page.waitForSelector('#render-ready', { timeout: 30_000 });
 
