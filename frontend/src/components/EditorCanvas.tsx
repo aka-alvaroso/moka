@@ -151,7 +151,11 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
       } else if (d.mode === 'radius') {
         const dx  = -(e.clientX - d.startMx);
         const max = Math.min(d.dispW, d.dispH) / 2;
-        const val = Math.max(0, Math.min(max, Math.round(d.startContent.borderRadius.all + dx * 0.6)));
+        // br.all is stored as a fraction 0–1 (0 = square, 1 = fully circular).
+        // Convert to pixels for delta math, then store back as fraction.
+        const currentPx = d.startContent.borderRadius.all * max;
+        const newPx = Math.max(0, Math.min(max, currentPx + dx * 0.6));
+        const val = max > 0 ? newPx / max : 0;
         onItemContentChange(d.itemId, { borderRadius: { ...d.startContent.borderRadius, all: val, tl: val, tr: val, br: val, bl: val } });
       } else if (d.mode === 'shadow') {
         const dx = e.clientX - d.startMx;
@@ -266,11 +270,13 @@ function ItemLayer({ item, cw, ch, selected, animatedProps, isAnimating, canvasR
 
   const br = live.borderRadius;
   const half = Math.min(dispW, dispH) / 2;
-  const rVal = br.linked ? br.all : Math.max(br.tl, br.tr, br.br, br.bl);
-  const r = Math.min(rVal, half);
+  // br values are fractions 0–1; multiply by half to get actual CSS pixels.
+  // This ensures the radius scales correctly at any export resolution.
+  const rFrac = br.linked ? br.all : Math.max(br.tl, br.tr, br.br, br.bl);
+  const r = rFrac * half;
   const borderRadiusCss = br.linked
-    ? `${Math.min(br.all, half)}px`
-    : `${Math.min(br.tl, half)}px ${Math.min(br.tr, half)}px ${Math.min(br.br, half)}px ${Math.min(br.bl, half)}px`;
+    ? `${br.all * half}px`
+    : `${br.tl * half}px ${br.tr * half}px ${br.br * half}px ${br.bl * half}px`;
 
   const sh = live.shadow;
   const shadowCss = sh.opacity > 0

@@ -95,9 +95,11 @@ export function RenderView() {
 
           const br = content.borderRadius;
           const half = Math.min(dispW, dispH) / 2;
+          // br values are fractions 0–1; multiply by half to get CSS pixels.
+          // This matches EditorCanvas and scales correctly at any export resolution.
           const borderRadiusCss = br.linked
-            ? `${Math.min(br.all, half)}px`
-            : `${Math.min(br.tl, half)}px ${Math.min(br.tr, half)}px ${Math.min(br.br, half)}px ${Math.min(br.bl, half)}px`;
+            ? `${br.all * half}px`
+            : `${br.tl * half}px ${br.tr * half}px ${br.br * half}px ${br.bl * half}px`;
 
           const sh = content.shadow;
           const shadowCss = sh.opacity > 0
