@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Router } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { rateLimit } from 'express-rate-limit';
@@ -38,16 +38,26 @@ const renderLimiter = rateLimit({
 
 app.use(express.json({ limit: '2mb' }));
 
-app.use('/api/upload', uploadLimiter, uploadRouter);
-app.use('/api/render', renderLimiter, renderRouter);
-app.use('/api/download', downloadRouter);
-app.use('/api/mediainfo', mediainfoRouter);
+// ── API routes ────────────────────────────────────────────────────────────────
+// Mounted at both /api/* (via Caddy, which strips /moka prefix) and
+// /moka/api/* (for Puppeteer, which hits Express directly on localhost).
+const apiRouter = Router();
+apiRouter.use('/upload', uploadLimiter, uploadRouter);
+apiRouter.use('/render', renderLimiter, renderRouter);
+apiRouter.use('/download', downloadRouter);
+apiRouter.use('/mediainfo', mediainfoRouter);
+
+app.use('/api', apiRouter);
+app.use('/moka/api', apiRouter);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // ── Serve built frontend (production) ─────────────────────────────────────────
+// Also served under /moka/* so Puppeteer (hitting localhost directly, without
+// Caddy stripping the prefix) can load JS assets at /moka/assets/*.
 const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
 app.use(express.static(frontendDist));
+app.use('/moka', express.static(frontendDist));
 app.get('*', (_req, res) => {
   const index = path.join(frontendDist, 'index.html');
   res.sendFile(index);
