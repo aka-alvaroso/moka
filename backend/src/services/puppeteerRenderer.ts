@@ -40,7 +40,7 @@ export async function screenshotRenderState(
 
   try {
     page.on('console', (msg) => console.log(`[puppeteer:${msg.type()}]`, msg.text()));
-    page.on('pageerror', (err) => console.error('[puppeteer:pageerror]', err.message));
+    page.on('pageerror', (err) => console.error('[puppeteer:pageerror]', err instanceof Error ? err.message : String(err)));
     page.on('requestfailed', (req) => console.error('[puppeteer:requestfailed]', req.url(), req.failure()?.errorText));
 
     await page.setViewport({ width: state.canvasW + 200, height: state.canvasH + 200 });
