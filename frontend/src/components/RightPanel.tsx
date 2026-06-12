@@ -147,7 +147,7 @@ function BorderRadiusSection({ borderRadius: br, onContent }: { borderRadius: Bo
         <SectionLabel>Border Radius</SectionLabel>
         <button
           onClick={() => {
-            const avg = Math.round((br.tl + br.tr + br.br + br.bl) / 4);
+            const avg = (br.tl + br.tr + br.br + br.bl) / 4;
             set({ linked: !br.linked, all: br.linked ? avg : br.all });
           }}
           style={{
@@ -165,14 +165,14 @@ function BorderRadiusSection({ borderRadius: br, onContent }: { borderRadius: Bo
       </div>
 
       {br.linked ? (
-        <RowSlider label="Radius" value={br.all} min={0} max={200} unit="px"
-          onChange={(v) => set({ all: v, tl: v, tr: v, br: v, bl: v })} />
+        <RowSlider label="Radius" value={Math.round(br.all * 100)} min={0} max={100} unit="%"
+          onChange={(v) => { const f = v / 100; set({ all: f, tl: f, tr: f, br: f, bl: f }); }} />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <RowSlider label="↖ TL" value={br.tl} min={0} max={200} unit="px" onChange={(v) => set({ tl: v })} />
-          <RowSlider label="↗ TR" value={br.tr} min={0} max={200} unit="px" onChange={(v) => set({ tr: v })} />
-          <RowSlider label="↙ BL" value={br.bl} min={0} max={200} unit="px" onChange={(v) => set({ bl: v })} />
-          <RowSlider label="↘ BR" value={br.br} min={0} max={200} unit="px" onChange={(v) => set({ br: v })} />
+          <RowSlider label="↖ TL" value={Math.round(br.tl * 100)} min={0} max={100} unit="%" onChange={(v) => set({ tl: v / 100 })} />
+          <RowSlider label="↗ TR" value={Math.round(br.tr * 100)} min={0} max={100} unit="%" onChange={(v) => set({ tr: v / 100 })} />
+          <RowSlider label="↙ BL" value={Math.round(br.bl * 100)} min={0} max={100} unit="%" onChange={(v) => set({ bl: v / 100 })} />
+          <RowSlider label="↘ BR" value={Math.round(br.br * 100)} min={0} max={100} unit="%" onChange={(v) => set({ br: v / 100 })} />
         </div>
       )}
     </div>

@@ -229,11 +229,11 @@ export async function renderImage(payload: RenderPayload): Promise<string> {
   const brCfg = content.borderRadius;
   const hasRadius = brCfg.linked ? brCfg.all > 0 : (brCfg.tl + brCfg.tr + brCfg.br + brCfg.bl) > 0;
   if (hasRadius) {
-    const s = resScale;
-    const tl = Math.round((brCfg.linked ? brCfg.all : brCfg.tl) * s);
-    const tr = Math.round((brCfg.linked ? brCfg.all : brCfg.tr) * s);
-    const br = Math.round((brCfg.linked ? brCfg.all : brCfg.br) * s);
-    const bl = Math.round((brCfg.linked ? brCfg.all : brCfg.bl) * s);
+    const half = Math.min(imgW, imgH) / 2;
+    const tl = Math.round((brCfg.linked ? brCfg.all : brCfg.tl) * half);
+    const tr = Math.round((brCfg.linked ? brCfg.all : brCfg.tr) * half);
+    const br = Math.round((brCfg.linked ? brCfg.all : brCfg.br) * half);
+    const bl = Math.round((brCfg.linked ? brCfg.all : brCfg.bl) * half);
     const mask = Buffer.from(
       `<svg xmlns="http://www.w3.org/2000/svg" width="${imgW}" height="${imgH}">
          <path d="M${tl},0 H${imgW - tr} Q${imgW},0 ${imgW},${tr} V${imgH - br} Q${imgW},${imgH} ${imgW - br},${imgH} H${bl} Q0,${imgH} 0,${imgH - bl} V${tl} Q0,0 ${tl},0 Z" fill="white"/>

@@ -72,9 +72,8 @@ export async function renderVideo(payload: RenderPayload): Promise<string> {
   //   - Apply rounded corners via vignette (or alphamerge with rounded mask)
   //   - Overlay video on background at posX,posY
   const brCfg = content.borderRadius;
-  const r = (brCfg.linked ? brCfg.all : Math.max(brCfg.tl, brCfg.tr, brCfg.br, brCfg.bl)) > 0
-    ? Math.round(brCfg.linked ? brCfg.all : Math.max(brCfg.tl, brCfg.tr, brCfg.br, brCfg.bl))
-    : 0;
+  const rFrac = brCfg.linked ? brCfg.all : Math.max(brCfg.tl, brCfg.tr, brCfg.br, brCfg.bl);
+  const r = rFrac > 0 ? Math.round(rFrac * Math.min(vidW, vidH) / 2) : 0;
 
   const outputFilename = `render_${uuidv4()}.mp4`;
   const outputPath = tmpPath(outputFilename);
