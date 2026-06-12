@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import type { MeshBlob, MeshConfig } from '@mockup-forge/shared';
+import { useTheme } from '../context/ThemeContext';
 
 // ── Presets ───────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,7 @@ interface Props {
 }
 
 export function MeshEditor({ value, onChange }: Props) {
+  const { colors } = useTheme();
   const editorRef  = useRef<HTMLDivElement>(null);
   const dragRef    = useRef<{ id: string; startMx: number; startMy: number; startX: number; startY: number; moved: boolean } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -180,7 +182,7 @@ export function MeshEditor({ value, onChange }: Props) {
             style={{
               width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer',
               background: meshToCss(p.config),
-              boxShadow: '0 0 0 1px rgba(255,255,255,0.08)',
+              boxShadow: `0 0 0 1px ${colors.presetRing}`,
               transition: 'box-shadow 0.12s',
             }}
           />
@@ -208,7 +210,7 @@ export function MeshEditor({ value, onChange }: Props) {
       <div className="flex items-center gap-2">
         {/* Base color */}
         <label className="relative cursor-pointer shrink-0" title="Base color">
-          <span className="block w-7 h-7 rounded-lg border-2 border-white/10" style={{ background: value.base }} />
+          <span className="block w-7 h-7 rounded-lg" style={{ background: value.base }} />
           <input type="color" value={value.base}
             onChange={(e) => onChange({ ...value, base: e.target.value })}
             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
@@ -234,30 +236,7 @@ export function MeshEditor({ value, onChange }: Props) {
       </div>
 
       {/* Selected blob controls */}
-      {selectedBlob && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px', background: '#0f0f0f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#555' }}>Blob</span>
-            <button onClick={() => deleteBlob(selectedBlob.id)}
-              style={{ fontSize: 10, color: '#e94f37', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 5 }}>
-              Delete
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#161616', borderRadius: 11, border: '1px solid rgba(255,255,255,0.06)' }}>
-            <span style={{ fontSize: 12, color: '#777', fontWeight: 500 }}>Color</span>
-            <label style={{ position: 'relative', cursor: 'pointer' }}>
-              <span style={{ display: 'block', width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: selectedBlob.color }} />
-              <input type="color" value={selectedBlob.color}
-                onChange={(e) => updateBlob(selectedBlob.id, { color: e.target.value })}
-                style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
-            </label>
-          </div>
-
-          <BlobSlider label="Size"    value={selectedBlob.size}    min={15}  max={150} unit="%" onChange={(v) => updateBlob(selectedBlob.id, { size: v })} />
-          <BlobSlider label="Opacity" value={Math.round(selectedBlob.opacity * 100)} min={5} max={100} unit="%" onChange={(v) => updateBlob(selectedBlob.id, { opacity: v / 100 })} />
-        </div>
-      )}
+      {selectedBlob && <BlobControls blob={selectedBlob} onDelete={() => deleteBlob(selectedBlob.id)} onUpdate={(p) => updateBlob(selectedBlob.id, p)} />}
     </div>
   );
 }
@@ -293,17 +272,47 @@ function BlobHandle({ blob, selected, onMouseDown }: {
   );
 }
 
+function BlobControls({ blob, onDelete, onUpdate }: {
+  blob: MeshBlob;
+  onDelete: () => void;
+  onUpdate: (patch: Partial<MeshBlob>) => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px', background: colors.bgInput, borderRadius: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: colors.sectionLabel }}>Blob</span>
+        <button onClick={onDelete}
+          style={{ fontSize: 10, color: colors.accent, background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 5 }}>
+          Delete
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: colors.bgRow, borderRadius: 11 }}>
+        <span style={{ fontSize: 12, color: colors.fgDim, fontWeight: 500 }}>Color</span>
+        <label style={{ position: 'relative', cursor: 'pointer' }}>
+          <span style={{ display: 'block', width: 28, height: 28, borderRadius: 8, background: blob.color }} />
+          <input type="color" value={blob.color}
+            onChange={(e) => onUpdate({ color: e.target.value })}
+            style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+        </label>
+      </div>
+
+      <BlobSlider label="Size"    value={blob.size}    min={15}  max={150} unit="%" onChange={(v) => onUpdate({ size: v })} />
+      <BlobSlider label="Opacity" value={Math.round(blob.opacity * 100)} min={5} max={100} unit="%" onChange={(v) => onUpdate({ opacity: v / 100 })} />
+    </div>
+  );
+}
+
 function BlobSlider({ label, value, min, max, unit, onChange }: {
   label: string; value: number; min: number; max: number; unit: string;
   onChange: (v: number) => void;
 }) {
+  const { colors } = useTheme();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const DOT_COUNT = 5;
-  const ACCENT = '#e94f37';
-  const ROW_BG = '#161616';
-  const ROW_BORDER = 'rgba(255,255,255,0.06)';
 
   useEffect(() => { if (editing) inputRef.current?.select(); }, [editing]);
 
@@ -314,21 +323,14 @@ function BlobSlider({ label, value, min, max, unit, onChange }: {
   };
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'stretch', borderRadius: 11, overflow: 'hidden',
-      border: `1px solid ${ROW_BORDER}`, position: 'relative', height: 40,
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', paddingLeft: 12, paddingRight: 10,
-        background: '#121212', borderRight: '1px solid rgba(255,255,255,0.05)',
-        flexShrink: 0, minWidth: 72,
-      }}>
-        <span style={{ fontSize: 12, color: '#666', fontWeight: 500 }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'stretch', borderRadius: 11, overflow: 'hidden', position: 'relative', height: 40, background: colors.bgRow }}>
+      <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 12, paddingRight: 10, background: colors.bgInput, flexShrink: 0, minWidth: 72 }}>
+        <span style={{ fontSize: 12, color: colors.fgDim, fontWeight: 500 }}>{label}</span>
       </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: ROW_BG, paddingLeft: 10, paddingRight: 12, gap: 8 }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', paddingLeft: 10, paddingRight: 12, gap: 8 }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', height: '100%' }}>
           {Array.from({ length: DOT_COUNT }).map((_, i) => (
-            <div key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,0.13)', flexShrink: 0, pointerEvents: 'none' }} />
+            <div key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--dot-color)', flexShrink: 0, pointerEvents: 'none' }} />
           ))}
           <input type="range" min={min} max={max} value={value}
             onChange={(e) => onChange(Number(e.target.value))}
@@ -341,13 +343,13 @@ function BlobSlider({ label, value, min, max, unit, onChange }: {
             onBlur={commit}
             onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
             onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
-            style={{ width: 44, textAlign: 'right', background: 'transparent', border: 'none', outline: 'none', fontSize: 12, fontFamily: 'monospace', color: '#ddd', padding: 0, position: 'relative', zIndex: 1 }}
+            style={{ width: 44, textAlign: 'right', background: 'transparent', border: 'none', outline: 'none', fontSize: 12, fontFamily: 'monospace', color: colors.fg, padding: 0, position: 'relative', zIndex: 1 }}
           />
         ) : (
           <span
             onClick={(e) => { e.stopPropagation(); setEditing(true); setDraft(String(value)); }}
             onPointerDown={(e) => e.stopPropagation()}
-            style={{ fontSize: 12, fontFamily: 'monospace', color: '#bbb', cursor: 'text', minWidth: 36, textAlign: 'right', flexShrink: 0, position: 'relative', zIndex: 1 }}
+            style={{ fontSize: 12, fontFamily: 'monospace', color: colors.fg, cursor: 'text', minWidth: 36, textAlign: 'right', flexShrink: 0, position: 'relative', zIndex: 1 }}
           >{value}{unit}</span>
         )}
       </div>

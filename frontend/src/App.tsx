@@ -8,6 +8,8 @@ import { ExportDrawer } from './components/ExportDrawer';
 import { LegalModal } from './components/LegalModal';
 import { TimelineBar } from './components/TimelineBar';
 import { interpolateProps } from './lib/interpolate';
+import { useTheme } from './context/ThemeContext';
+import type { ThemeMode } from './context/ThemeContext';
 import type { AnimatedProps, AnimationConfig } from '@mockup-forge/shared';
 
 const ACCENT = '#e94f37';
@@ -21,20 +23,23 @@ export default function App() {
     setBackground, setCanvas, setAnimationConfig,
   } = useEditor();
 
-  const [exportOpen,   setExportOpen]   = useState(false);
-  const [legalPage,    setLegalPage]    = useState<'privacy' | 'terms' | null>(null);
-  const [timelineOpen, setTimelineOpen] = useState(false);
-  const [playing,      setPlaying]      = useState(false);
-  const [currentTime,  setCurrentTime]  = useState(0);
+  const { mode, colors, setMode } = useTheme();
+
+  const [exportOpen,     setExportOpen]     = useState(false);
+  const [legalPage,      setLegalPage]      = useState<'privacy' | 'terms' | null>(null);
+  const [timelineOpen,   setTimelineOpen]   = useState(false);
+  const [playing,        setPlaying]        = useState(false);
+  const [currentTime,    setCurrentTime]    = useState(0);
   const [allAnimatedProps, setAllAnimatedProps] = useState<Record<string, AnimatedProps>>({});
-  const [scrubbing,    setScrubbing]    = useState(false);
+  const [scrubbing,      setScrubbing]      = useState(false);
+  const [settingsOpen,   setSettingsOpen]   = useState(false);
 
   const rafRef      = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   const selectedItem = state.mediaItems.find((i) => i.id === state.selectedItemId) ?? null;
 
-  // Computed AnimationConfig for the selected item (for TimelineBar)
   const animationConfig: AnimationConfig = {
     enabled: state.animationEnabled,
     duration: state.animationDuration,
@@ -42,7 +47,7 @@ export default function App() {
     keyframes: selectedItem?.keyframes ?? [],
   };
 
-  // ── Playback loop ────────────────────────────────────────────────────────────
+  // ── Playback loop ──────────────────────────────────────────────────────────
 
   const stopPlayback = useCallback(() => {
     setPlaying(false);
@@ -67,11 +72,9 @@ export default function App() {
       setAllAnimatedProps(computeAllAnimatedProps(currentTime));
       return;
     }
-
     const tick = (now: number) => {
       const delta = lastTickRef.current !== null ? (now - lastTickRef.current) / 1000 : 0;
       lastTickRef.current = now;
-
       setCurrentTime((prev) => {
         const next = prev + delta;
         if (next >= state.animationDuration) {
@@ -83,10 +86,8 @@ export default function App() {
         setAllAnimatedProps(computeAllAnimatedProps(next));
         return next;
       });
-
       rafRef.current = requestAnimationFrame(tick);
     };
-
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
   }, [playing, state.animationDuration, currentTime, stopPlayback, computeAllAnimatedProps]);
@@ -104,6 +105,18 @@ export default function App() {
     }
   }, [timelineOpen, stopPlayback]);
 
+  // Close settings on outside click
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [settingsOpen]);
+
   const handlePlayToggle = () => {
     if (playing) {
       stopPlayback();
@@ -114,13 +127,11 @@ export default function App() {
     }
   };
 
-  // Content change for an item by id (used by canvas)
   const handleItemContentChange = useCallback((id: string, patch: Partial<import('@mockup-forge/shared').ContentOptions>) => {
     if (timelineOpen) setItemContentAndKeyframe(id, patch, currentTime);
     else setItemContent(id, patch);
   }, [timelineOpen, currentTime, setItemContent, setItemContentAndKeyframe]);
 
-  // Content change for the selected item (used by right panel)
   const handleSelectedContentChange = useCallback((patch: Partial<import('@mockup-forge/shared').ContentOptions>) => {
     if (!state.selectedItemId) return;
     handleItemContentChange(state.selectedItemId, patch);
@@ -129,14 +140,16 @@ export default function App() {
   const isAnimating = playing || scrubbing;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#161616' }}
-      className="select-none">
-
-      {/* Main row: left panel + canvas + right panel */}
+    <div
+      data-theme={mode}
+      style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: colors.bgApp, transition: 'background 0.2s' }}
+      className="select-none"
+    >
+      {/* Main row */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
 
-        {/* Wordmark */}
-        <img src={`${import.meta.env.BASE_URL}Moka.svg`} alt="moka"
+        {/* Logo */}
+        <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="moka"
           style={{ position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10, height: 28, pointerEvents: 'none' }} />
 
         <LeftPanel
@@ -149,7 +162,7 @@ export default function App() {
           onExport={() => setExportOpen(true)}
         />
 
-        {/* Center: canvas + animate button + footer */}
+        {/* Center */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, paddingTop: 18 }}>
           <div style={{ flex: 1, minHeight: 0 }}>
             <EditorCanvas
@@ -180,28 +193,89 @@ export default function App() {
           </div>
 
           {/* Footer */}
-          <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '8px 24px', flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: 12 }}>
-            <span style={{ fontSize: 11, color: '#333', whiteSpace: 'nowrap' }}>
-              Made with <span style={{ color: ACCENT }}>♥</span> by{' '}
-              <a href="https://alvaroso.dev" target="_blank" rel="noopener noreferrer"
-                style={{ color: '#555', textDecoration: 'none', fontWeight: 600 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
-                onMouseLeave={(e) => (e.currentTarget.style.color = '#555')}
-              >@aka_alvaroso</a>
-            </span>
-            <span style={{ color: '#222', fontSize: 11 }}>·</span>
-            <a href="https://github.com/aka-alvaroso/moka" target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#333', textDecoration: 'none', fontSize: 11 }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#666'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#333'; }}
-            >
-              <GitHubIcon /> Source code
-            </a>
-            <span style={{ color: '#222', fontSize: 11 }}>·</span>
-            <span style={{ display: 'flex', gap: 10, fontSize: 11 }}>
-              <FooterBtn onClick={() => setLegalPage('privacy')}>Privacy</FooterBtn>
-              <FooterBtn onClick={() => setLegalPage('terms')}>Terms</FooterBtn>
-            </span>
+          <footer style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '8px 24px', flexShrink: 0,
+            borderTop: `1px solid ${colors.divider}`, marginTop: 12,
+          }}>
+            {/* Settings button */}
+            <div ref={settingsRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setSettingsOpen((v) => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: settingsOpen ? ACCENT : 'transparent',
+                  border: 'none', cursor: 'pointer',
+                  color: settingsOpen ? '#fff' : colors.fgSubtle,
+                  fontSize: 11, fontWeight: 600, padding: '4px 10px',
+                  borderRadius: 8, transition: 'background 0.15s, color 0.15s',
+                }}
+                onMouseEnter={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fgDim; }}
+                onMouseLeave={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fgSubtle; }}
+              >
+                <GearIcon /> Settings
+              </button>
+
+              {/* Settings popover */}
+              {settingsOpen && (
+                <div style={{
+                  position: 'absolute', bottom: 'calc(100% + 8px)', left: 0,
+                  background: colors.bgPanel, borderRadius: 14,
+                  boxShadow: mode === 'dark'
+                    ? '0 8px 32px rgba(0,0,0,0.6)'
+                    : '0 8px 32px rgba(0,0,0,0.15)',
+                  padding: '14px 14px 10px', minWidth: 180, zIndex: 100,
+                }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: colors.sectionLabel, margin: '0 0 10px' }}>Theme</p>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {(['dark', 'light'] as ThemeMode[]).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setMode(m)}
+                        style={{
+                          flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
+                          cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                          background: mode === m ? ACCENT : colors.bgRow,
+                          color: mode === m ? '#fff' : colors.fgDim,
+                          transition: 'background 0.15s, color 0.15s',
+                          textTransform: 'capitalize',
+                        }}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Center links */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <span style={{ fontSize: 11, color: colors.fgSubtle, whiteSpace: 'nowrap' }}>
+                Made with <span style={{ color: ACCENT }}>♥</span> by{' '}
+                <a href="https://alvaroso.dev" target="_blank" rel="noopener noreferrer"
+                  style={{ color: colors.fgDim, textDecoration: 'none', fontWeight: 600 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = colors.fgDim)}
+                >@aka_alvaroso</a>
+              </span>
+              <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
+              <a href="https://github.com/aka-alvaroso/moka" target="_blank" rel="noopener noreferrer"
+                style={{ display: 'flex', alignItems: 'center', gap: 5, color: colors.fgSubtle, textDecoration: 'none', fontSize: 11 }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = colors.fgDim; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgSubtle; }}
+              >
+                <GitHubIcon /> Source code
+              </a>
+              <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
+              <span style={{ display: 'flex', gap: 10, fontSize: 11 }}>
+                <FooterBtn onClick={() => setLegalPage('privacy')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Privacy</FooterBtn>
+                <FooterBtn onClick={() => setLegalPage('terms')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Terms</FooterBtn>
+              </span>
+            </div>
+
+            {/* Right spacer to balance settings button */}
+            <div style={{ width: 90 }} />
           </footer>
         </div>
 
@@ -245,12 +319,21 @@ export default function App() {
   );
 }
 
-function FooterBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function FooterBtn({ onClick, children, color, hoverColor }: { onClick: () => void; children: React.ReactNode; color: string; hoverColor: string }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#333', padding: 0, fontSize: 11 }}
-      onMouseEnter={(e) => (e.currentTarget.style.color = '#666')}
-      onMouseLeave={(e) => (e.currentTarget.style.color = '#333')}
+    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', color, padding: 0, fontSize: 11 }}
+      onMouseEnter={(e) => (e.currentTarget.style.color = hoverColor)}
+      onMouseLeave={(e) => (e.currentTarget.style.color = color)}
     >{children}</button>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
   );
 }
 

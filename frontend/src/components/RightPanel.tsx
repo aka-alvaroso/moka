@@ -1,11 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import type { ContentOptions, BorderRadiusConfig, ShadowConfig, MediaItem } from '@mockup-forge/shared';
-
-const ACCENT    = '#e94f37';
-const FG        = '#E9E9E9';
-const FG_DIM    = '#666';
-const ROW_BG    = '#161616';
-const ROW_BORDER = 'rgba(255,255,255,0.06)';
+import { useTheme } from '../context/ThemeContext';
 
 interface Props {
   item: MediaItem | null;
@@ -14,6 +9,8 @@ interface Props {
 }
 
 export function RightPanel({ item, onContent, onVideoEndBehavior }: Props) {
+  const { colors } = useTheme();
+
   return (
     <div style={{
       margin: '24px 24px 24px 0',
@@ -22,16 +19,17 @@ export function RightPanel({ item, onContent, onVideoEndBehavior }: Props) {
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',
-      background: '#0d0d0d',
+      background: colors.bgPanel,
       borderRadius: 24,
-      border: '1px solid rgba(255,255,255,0.07)',
-      color: FG,
+      color: colors.fg,
       overflow: 'hidden',
+      transition: 'background 0.2s',
     }}>
       <style>{`
         .rpanel-scroll::-webkit-scrollbar { width: 3px; }
         .rpanel-scroll::-webkit-scrollbar-track { background: transparent; }
-        .rpanel-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+        .rpanel-scroll::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 99px; }
+        .rpanel-scroll::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
         input[type=range].rp-slider {
           -webkit-appearance: none !important; appearance: none !important;
           width: 100%; height: 100%; background: transparent !important;
@@ -40,19 +38,19 @@ export function RightPanel({ item, onContent, onVideoEndBehavior }: Props) {
         input[type=range].rp-slider::-webkit-slider-runnable-track { background: transparent !important; height: 2px; }
         input[type=range].rp-slider::-webkit-slider-thumb {
           -webkit-appearance: none !important; width: 3px !important; height: 22px !important;
-          border-radius: 99px !important; background: #e9e9e9 !important; cursor: ew-resize; margin-top: -10px;
+          border-radius: 99px !important; background: var(--slider-thumb) !important; cursor: ew-resize; margin-top: -10px;
         }
         input[type=range].rp-slider::-moz-range-track { background: transparent !important; height: 2px; }
         input[type=range].rp-slider::-moz-range-thumb {
           width: 3px !important; height: 22px !important; border-radius: 99px !important;
-          border: none !important; background: #e9e9e9 !important; cursor: ew-resize;
+          border: none !important; background: var(--slider-thumb) !important; cursor: ew-resize;
         }
       `}</style>
 
       {!item ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: 0.35 }}>
-          <LayersIcon />
-          <span style={{ fontSize: 12, color: '#888', textAlign: 'center', lineHeight: 1.4 }}>Select a layer<br/>to edit its properties</span>
+          <LayersIcon color={colors.fgDim} />
+          <span style={{ fontSize: 12, color: colors.fgDim, textAlign: 'center', lineHeight: 1.4 }}>Select a layer<br/>to edit its properties</span>
         </div>
       ) : (
         <div className="rpanel-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20, paddingRight: 4 }}>
@@ -78,12 +76,14 @@ export function RightPanel({ item, onContent, onVideoEndBehavior }: Props) {
 }
 
 function SectionDivider() {
-  return <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', margin: '0 -4px' }} />;
+  const { colors } = useTheme();
+  return <div style={{ height: 1, background: colors.divider, margin: '0 -4px' }} />;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
+  const { colors } = useTheme();
   return (
-    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#555', margin: '0 0 8px' }}>
+    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: colors.sectionLabel, margin: '0 0 8px' }}>
       {children}
     </p>
   );
@@ -94,13 +94,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 const ROTATION_PRESETS = [{ label: '0°', value: 0 }, { label: '90°', value: 90 }, { label: '180°', value: 180 }, { label: '-90°', value: -90 }];
 
 function RotationSection({ rotation, onContent }: { rotation: number; onContent: (p: Partial<ContentOptions>) => void }) {
+  const { colors } = useTheme();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <SectionLabel>Rotation</SectionLabel>
       <RowSlider label="Angle" value={rotation} min={-180} max={180} unit="°" onChange={(v) => onContent({ rotation: v })} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
         {ROTATION_PRESETS.map(({ label, value }) => (
-          <button key={label} onClick={() => onContent({ rotation: value })} style={chipBtnStyle(rotation === value)}>{label}</button>
+          <button key={label} onClick={() => onContent({ rotation: value })} style={chipBtnStyle(rotation === value, colors)}>{label}</button>
         ))}
       </div>
     </div>
@@ -112,13 +113,14 @@ function RotationSection({ rotation, onContent }: { rotation: number; onContent:
 const ZOOM_PRESETS = [{ label: '50%', value: 0.5 }, { label: '100%', value: 1 }, { label: '150%', value: 1.5 }, { label: '200%', value: 2 }];
 
 function ZoomSection({ scale, onContent }: { scale: number; onContent: (p: Partial<ContentOptions>) => void }) {
+  const { colors } = useTheme();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <SectionLabel>Zoom</SectionLabel>
       <RowSlider label="Scale" value={Math.round(scale * 100)} min={5} max={400} unit="%" onChange={(v) => onContent({ scale: v / 100 })} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
         {ZOOM_PRESETS.map(({ label, value }) => (
-          <button key={label} onClick={() => onContent({ scale: value })} style={chipBtnStyle(Math.abs(scale - value) < 0.01)}>{label}</button>
+          <button key={label} onClick={() => onContent({ scale: value })} style={chipBtnStyle(Math.abs(scale - value) < 0.01, colors)}>{label}</button>
         ))}
       </div>
     </div>
@@ -139,6 +141,7 @@ function OpacitySection({ opacity, onContent }: { opacity: number; onContent: (p
 // ── Border radius ─────────────────────────────────────────────────────────────
 
 function BorderRadiusSection({ borderRadius: br, onContent }: { borderRadius: BorderRadiusConfig; onContent: (p: Partial<ContentOptions>) => void }) {
+  const { colors } = useTheme();
   const set = (patch: Partial<BorderRadiusConfig>) => onContent({ borderRadius: { ...br, ...patch } });
 
   return (
@@ -151,11 +154,11 @@ function BorderRadiusSection({ borderRadius: br, onContent }: { borderRadius: Bo
             set({ linked: !br.linked, all: br.linked ? avg : br.all });
           }}
           style={{
-            background: br.linked ? ACCENT : ROW_BG,
-            border: br.linked ? 'none' : `1px solid ${ROW_BORDER}`,
+            background: br.linked ? colors.accent : colors.bgRow,
+            border: 'none',
             cursor: 'pointer', borderRadius: 7, padding: '3px 10px',
             fontSize: 10, fontWeight: 600,
-            color: br.linked ? '#fff' : '#888',
+            color: br.linked ? '#fff' : colors.fgDim,
             transition: 'background 0.12s, color 0.12s',
             marginBottom: 8,
           }}
@@ -208,6 +211,7 @@ const END_OPTIONS: Array<{ value: MediaItem['videoEndBehavior']; label: string; 
 ];
 
 function VideoEndSection({ behavior, onChange }: { behavior: MediaItem['videoEndBehavior']; onChange: (b: MediaItem['videoEndBehavior']) => void }) {
+  const { colors } = useTheme();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <SectionLabel>When video ends</SectionLabel>
@@ -216,14 +220,13 @@ function VideoEndSection({ behavior, onChange }: { behavior: MediaItem['videoEnd
           <button key={opt.value} onClick={() => onChange(opt.value)}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '8px 12px', borderRadius: 10, cursor: 'pointer',
-              background: behavior === opt.value ? '#1e100e' : ROW_BG,
-              border: `1px solid ${behavior === opt.value ? ACCENT + '55' : ROW_BORDER}`,
-              transition: 'all 0.12s',
+              padding: '8px 12px', borderRadius: 10, cursor: 'pointer', border: 'none',
+              background: behavior === opt.value ? colors.bgSelected : colors.bgRow,
+              transition: 'background 0.12s',
             }}
           >
-            <span style={{ fontSize: 12, fontWeight: 600, color: behavior === opt.value ? ACCENT : '#bbb' }}>{opt.label}</span>
-            <span style={{ fontSize: 10, color: '#555' }}>{opt.desc}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: behavior === opt.value ? colors.accent : colors.fg }}>{opt.label}</span>
+            <span style={{ fontSize: 10, color: colors.fgDim }}>{opt.desc}</span>
           </button>
         ))}
       </div>
@@ -234,9 +237,10 @@ function VideoEndSection({ behavior, onChange }: { behavior: MediaItem['videoEnd
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  const { colors } = useTheme();
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: ROW_BG, borderRadius: 11, border: `1px solid ${ROW_BORDER}` }}>
-      <span style={{ fontSize: 12, color: '#777', fontWeight: 500 }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: colors.bgRow, borderRadius: 11 }}>
+      <span style={{ fontSize: 12, color: colors.fgDim, fontWeight: 500 }}>{label}</span>
       {children}
     </div>
   );
@@ -245,6 +249,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 function RowSlider({ label, value, min, max, unit = '', onChange }: {
   label: string; value: number; min: number; max: number; unit?: string; onChange: (v: number) => void;
 }) {
+  const { colors } = useTheme();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -259,14 +264,14 @@ function RowSlider({ label, value, min, max, unit = '', onChange }: {
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'stretch', borderRadius: 11, overflow: 'hidden', border: `1px solid ${ROW_BORDER}`, position: 'relative', height: 40 }}>
-      <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 12, paddingRight: 10, background: '#121212', borderRight: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, minWidth: 72 }}>
-        <span style={{ fontSize: 12, color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'stretch', borderRadius: 11, overflow: 'hidden', position: 'relative', height: 40, background: colors.bgRow }}>
+      <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 12, paddingRight: 10, background: colors.bgInput, flexShrink: 0, minWidth: 72 }}>
+        <span style={{ fontSize: 12, color: colors.fgDim, fontWeight: 500, whiteSpace: 'nowrap' }}>{label}</span>
       </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: ROW_BG, paddingLeft: 10, paddingRight: 12, gap: 8 }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', paddingLeft: 10, paddingRight: 12, gap: 8 }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', height: '100%' }}>
           {Array.from({ length: DOT_COUNT }).map((_, i) => (
-            <div key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,0.13)', flexShrink: 0, pointerEvents: 'none' }} />
+            <div key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--dot-color)', flexShrink: 0, pointerEvents: 'none' }} />
           ))}
           <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} className="rp-slider" />
         </div>
@@ -274,11 +279,11 @@ function RowSlider({ label, value, min, max, unit = '', onChange }: {
           <input ref={inputRef} type="text" value={draft} onChange={(e) => setDraft(e.target.value)}
             onBlur={commitDraft} onKeyDown={(e) => { if (e.key === 'Enter') commitDraft(); if (e.key === 'Escape') setEditing(false); }}
             onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
-            style={{ width: 44, textAlign: 'right', background: 'transparent', border: 'none', outline: 'none', fontSize: 12, fontFamily: 'monospace', color: '#ddd', padding: 0, position: 'relative', zIndex: 1 }} />
+            style={{ width: 44, textAlign: 'right', background: 'transparent', border: 'none', outline: 'none', fontSize: 12, fontFamily: 'monospace', color: colors.fg, padding: 0, position: 'relative', zIndex: 1 }} />
         ) : (
           <span onClick={(e) => { e.stopPropagation(); setEditing(true); setDraft(String(value)); }}
             onPointerDown={(e) => e.stopPropagation()}
-            style={{ fontSize: 12, fontFamily: 'monospace', color: '#bbb', cursor: 'text', minWidth: 36, textAlign: 'right', flexShrink: 0, position: 'relative', zIndex: 1 }}>
+            style={{ fontSize: 12, fontFamily: 'monospace', color: colors.fg, cursor: 'text', minWidth: 36, textAlign: 'right', flexShrink: 0, position: 'relative', zIndex: 1 }}>
             {value}{unit}
           </span>
         )}
@@ -290,25 +295,26 @@ function RowSlider({ label, value, min, max, unit = '', onChange }: {
 function ColorSwatch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <label style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
-      <span style={{ display: 'block', width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: value }} />
+      <span style={{ display: 'block', width: 28, height: 28, borderRadius: 8, background: value }} />
       <input type="color" value={value} onChange={(e) => onChange(e.target.value)}
         style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
     </label>
   );
 }
 
-function chipBtnStyle(active: boolean): React.CSSProperties {
+function chipBtnStyle(active: boolean, colors: ReturnType<typeof useTheme>['colors']): React.CSSProperties {
   return {
     padding: '7px 4px', borderRadius: 10, fontSize: 10, fontWeight: 600,
-    border: active ? 'none' : `1px solid ${ROW_BORDER}`, cursor: 'pointer', letterSpacing: '0.02em',
-    background: active ? ACCENT : ROW_BG, color: active ? '#fff' : '#888',
+    border: 'none', cursor: 'pointer', letterSpacing: '0.02em',
+    background: active ? colors.accent : colors.bgRow,
+    color: active ? '#fff' : colors.fgDim,
     transition: 'background 0.12s, color 0.12s',
   };
 }
 
-function LayersIcon() {
+function LayersIcon({ color }: { color: string }) {
   return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="12 2 2 7 12 12 22 7 12 2"/>
       <polyline points="2 17 12 22 22 17"/>
       <polyline points="2 12 12 17 22 12"/>

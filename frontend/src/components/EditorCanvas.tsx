@@ -4,6 +4,7 @@ import type { EditorState } from '../hooks/useEditor';
 import type { ContentOptions, MediaItem, AnimatedProps } from '@mockup-forge/shared';
 import { meshToCss } from './MeshEditor';
 import { uploadFile, fetchMediaInfo } from '../lib/api';
+import { useTheme } from '../context/ThemeContext';
 
 const RATIO_MAP: Record<string, number> = {
   '1:1': 1, '16:9': 16 / 9, '4:5': 4 / 5, '9:16': 9 / 16, '4:3': 4 / 3,
@@ -60,6 +61,7 @@ interface Props {
 
 export function EditorCanvas({ state, onItemContentChange, onItemSelected, onItemAdded, allAnimatedProps, isAnimating }: Props) {
   const { background, canvas, mediaItems, selectedItemId } = state;
+  const { mode } = useTheme();
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef  = useRef<HTMLDivElement>(null);
@@ -227,7 +229,7 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
         {/* Empty state */}
         {mediaItems.length === 0 && !isDragActive && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 cursor-pointer" style={{ zIndex: 1, border: `2px dashed rgba(233,79,55,0.35)`, borderRadius: 'inherit' }} onClick={open}>
-            <img src={`${import.meta.env.BASE_URL}empty_state.svg`} style={{ width: 200, height: 'auto', opacity: 0.7 }} draggable={false} />
+            <img src={`${import.meta.env.BASE_URL}empty_state_${mode}.svg`} style={{ width: 200, height: 'auto', opacity: 0.7 }} draggable={false} />
             <div style={{ textAlign: 'center' }}>
               <p style={{ color: '#e94f37', fontSize: 13, fontWeight: 500, margin: 0 }}>Drop image or video</p>
               <p style={{ color: 'rgba(233,79,55,0.6)', fontSize: 11, margin: '4px 0 0' }}>PNG · JPG · WebP · MP4 · MKV</p>
