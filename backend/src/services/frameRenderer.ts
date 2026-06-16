@@ -89,8 +89,14 @@ export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
     totalFrames > 1 ? (i / (totalFrames - 1)) * durationSec : 0);
   const baseState: PuppeteerRenderState = { items, background, canvas, canvasW, canvasH, time: times[0] };
 
+  // Each parallel page streams the scene's video over HTTP; multiple at once
+  // starve Chrome's per-host connection budget and abort the load. So when the
+  // scene has any video, capture single-threaded (one page, video loaded once) —
+  // reliable over fast. Pure-image animations keep the parallel default.
+  const hasVideo = items.some((it) => it.isVideo);
   const captured = await captureFrameSequence(baseState, times, {
     frameDir, ext: 'jpg', quality: 95,
+    concurrency: hasVideo ? 1 : undefined,
     onProgress: (d, t) => console.log(`[frameRenderer] captured ${d}/${t} frames`),
   });
 
