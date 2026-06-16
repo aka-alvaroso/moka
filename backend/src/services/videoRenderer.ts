@@ -40,10 +40,12 @@ export async function renderVideo(payload: MultiRenderPayload): Promise<string> 
   // Output length = longest video layer; audio from the first layer with a track.
   let durationSec = 0;
   let audioFromFile: string | undefined;
+  let videoFps = 30;
   for (const item of payload.items) {
     if (!item.isVideo) continue;
     const info = await probeMedia(item.fileId);
     durationSec = Math.max(durationSec, info.duration);
+    videoFps = info.fps;
     if (!audioFromFile && info.hasAudio) audioFromFile = item.fileId;
   }
   if (durationSec <= 0) durationSec = 5;
@@ -57,7 +59,7 @@ export async function renderVideo(payload: MultiRenderPayload): Promise<string> 
   const hybridVideo = videoLayers.length === 1 ? videoLayers[0] : null;
 
   if (hybridVideo) {
-    return renderVideoHybrid(payload, hybridVideo, canvasW, canvasH, durationSec, audioFromFile);
+    return renderVideoHybrid(payload, hybridVideo, canvasW, canvasH, durationSec, videoFps, audioFromFile);
   }
 
   // Fallback — capture the whole scene frame-by-frame (parallelised).
@@ -81,6 +83,7 @@ async function renderVideoHybrid(
   canvasW: number,
   canvasH: number,
   durationSec: number,
+  fps: number,
   audioFromFile: string | undefined,
 ): Promise<string> {
   // Split the static layers around the video by stacking order.
@@ -183,19 +186,28 @@ async function renderVideoHybrid(
   const outputFilename = `vid_${uuidv4()}.mp4`;
   const outputPath = tmpPath(outputFilename);
 
+  // The looping plate is generated at the VIDEO's framerate. A mismatch (e.g. the
+  // default 25fps plate vs a 30fps source) makes overlay buffer plate frames while
+  // it waits for the video — with B-frame sources that buffer grows unbounded and
+  // the process is OOM-killed (stuck at frame=0). Matching fps keeps it lockstep.
+  const r = fps > 0 && Number.isFinite(fps) ? fps.toFixed(3) : '30';
+
   await new Promise<void>((resolve, reject) => {
     const cmd = ffmpeg()
       // Bound the looping plate to the video length as a hard safety net on top
       // of overlay shortest=1.
-      .input(platePath).inputOptions(['-loop 1', `-t ${durationSec}`])
+      .input(platePath).inputOptions(['-loop 1', `-framerate ${r}`, `-t ${durationSec}`])
       .input(tmpPath(video.fileId));
     if (maskPath) cmd.input(maskPath);
-    if (topPlatePath) cmd.input(topPlatePath).inputOptions(['-loop 1', `-t ${durationSec}`]);
+    if (topPlatePath) cmd.input(topPlatePath).inputOptions(['-loop 1', `-framerate ${r}`, `-t ${durationSec}`]);
 
     const out = [
       '-map [out]',
       '-c:v libx264', '-crf 18', '-preset fast', '-pix_fmt yuv420p',
       '-colorspace bt709', '-color_primaries bt709', '-color_trc bt709',
+      // Constant output framerate + bounded muxer queue: defend against VFR/B-frame
+      // sources that otherwise stall or balloon memory in the filter graph.
+      '-fps_mode cfr', `-r ${r}`, '-max_muxing_queue_size 1024',
       '-movflags +faststart',
       ...(audioFromFile ? ['-map 1:a?', '-c:a aac'] : []),
       '-shortest',
