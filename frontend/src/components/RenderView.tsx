@@ -1,153 +1,176 @@
 import { useEffect, useRef, useState } from 'react';
-import type { PuppeteerRenderState } from '@mockup-forge/shared';
-import { meshToCss } from './MeshEditor';
+import type { PuppeteerRenderState, PuppeteerItem } from '@mockup-forge/shared';
+import { backgroundCss, computeItemLayout, applyAnimatedProps, shadowCss } from '../render/layout';
+import { interpolateProps } from '../lib/interpolate';
 
 const BASE = import.meta.env.VITE_API_URL ?? `${import.meta.env.BASE_URL}api`;
 
-function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.substring(0, 2), 16) || 0;
-  const g = parseInt(h.substring(2, 4), 16) || 0;
-  const b = parseInt(h.substring(4, 6), 16) || 0;
-  return `rgba(${r},${g},${b},${alpha})`;
+// ── Off-screen render target captured by Puppeteer ────────────────────────────
+//
+// Renders the EXACT same scene as the live preview via the shared `layout`
+// module. Two capture modes share one page:
+//   • Single shot (PNG/JPG): backend waits for #render-ready, screenshots once.
+//   • Frame sequence (MP4):   backend calls window.__mokaRenderFrame(t) per frame
+//     — the video loads ONCE and we only re-seek + re-interpolate per frame, so a
+//     150-frame export is one page load and one download, not 150 of each.
+
+const raf = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+// Seek a <video> to `t` (clamped to its duration) and resolve once the frame is
+// actually presented. Resolves immediately if already on that frame.
+function seekVideo(v: HTMLVideoElement, t: number): Promise<void> {
+  return new Promise((resolve) => {
+    const dur = Number.isFinite(v.duration) ? v.duration : Infinity;
+    const target = Math.min(t, Math.max(0, dur - 1e-3));
+    if (Math.abs(v.currentTime - target) < 1 / 240) return resolve();
+    const onSeeked = () => { v.removeEventListener('seeked', onSeeked); resolve(); };
+    v.addEventListener('seeked', onSeeked);
+    v.currentTime = target;
+  });
 }
 
 export function RenderView() {
   const [renderState, setRenderState] = useState<PuppeteerRenderState | null>(null);
   const [ready, setReady] = useState(false);
+  const [time, setTime] = useState(0);
+
+  const timeRef = useRef(0);
+  const videosRef = useRef(new Map<string, HTMLVideoElement>());
   const loadedRef = useRef(0);
   const totalRef = useRef(0);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
+    const token = new URLSearchParams(window.location.search).get('token');
     if (!token) return;
 
     fetch(`${BASE}/render/state/${token}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`State fetch failed: ${r.status}`);
-        return r.json() as Promise<PuppeteerRenderState>;
-      })
+      .then((r) => { if (!r.ok) throw new Error(`State fetch failed: ${r.status}`); return r.json() as Promise<PuppeteerRenderState>; })
       .then((data) => {
+        const t0 = data.time ?? 0;
+        timeRef.current = t0;
+        setTime(t0);
         loadedRef.current = 0;
-        const bgImg = data.background.type === 'image' ? 1 : 0;
-        totalRef.current = data.items.length + bgImg;
-        if (totalRef.current === 0) setReady(true);
+        // Plate-mode items (hideMedia) render no asset, so they don't count.
+        totalRef.current = data.items.filter((it) => !it.hideMedia).length + (data.background.type === 'image' ? 1 : 0);
         setRenderState(data);
+        if (totalRef.current === 0) finalizeInitial();
       })
       .catch(console.error);
   }, []);
 
-  const handleLoad = () => {
-    loadedRef.current += 1;
-    if (loadedRef.current >= totalRef.current) setReady(true);
+  // All assets reported in → seek videos to the first frame, then signal ready.
+  const finalizeInitial = async () => {
+    await Promise.all([...videosRef.current.values()].map((v) => seekVideo(v, timeRef.current)));
+    setReady(true);
   };
+
+  const handleAssetLoad = () => {
+    loadedRef.current += 1;
+    if (loadedRef.current >= totalRef.current) finalizeInitial();
+  };
+
+  // Expose the per-frame controller once the scene is ready.
+  useEffect(() => {
+    if (!ready) return;
+    (window as Window & typeof globalThis & { __mokaRenderFrame?: (t: number) => Promise<void>; __mokaReady?: boolean })
+      .__mokaRenderFrame = async (t: number) => {
+        timeRef.current = t;
+        // Re-render interpolated transforms, then seek every video to t, then paint.
+        await new Promise<void>((resolve) => { setTime(t); requestAnimationFrame(() => requestAnimationFrame(() => resolve())); });
+        await Promise.all([...videosRef.current.values()].map((v) => seekVideo(v, t)));
+        await raf();
+      };
+    (window as Window & typeof globalThis & { __mokaReady?: boolean }).__mokaReady = true;
+  }, [ready]);
 
   if (!renderState) return null;
 
   const { items, background, canvasW, canvasH } = renderState;
-
-  let bgCss: React.CSSProperties = {};
-  switch (background.type) {
-    case 'solid':
-      bgCss = { background: background.color || '#1a1a2e' };
-      break;
-    case 'gradient': {
-      const { from = '#1a1a2e', to = '#16213e', direction = 135 } = background.gradient ?? {};
-      bgCss = { background: `linear-gradient(${direction}deg,${from},${to})` };
-      break;
-    }
-    case 'mesh':
-      bgCss = { background: background.mesh ? meshToCss(background.mesh) : '#0f0c29' };
-      break;
-    case 'transparent':
-      bgCss = { background: 'transparent' };
-      break;
-    default:
-      bgCss = { background: '#1a1a2e' };
-  }
-
   const sortedItems = [...items].sort((a, b) => a.zIndex - b.zIndex);
 
   return (
     <div style={{ margin: 0, padding: 0, overflow: 'hidden', background: 'transparent', display: 'inline-block' }}>
-      <div
-        data-export-canvas
-        style={{ width: canvasW, height: canvasH, position: 'relative', overflow: 'hidden', ...bgCss }}
-      >
+      <div data-export-canvas style={{ width: canvasW, height: canvasH, position: 'relative', overflow: 'hidden', ...backgroundCss(background, 'alpha') }}>
         {background.type === 'image' && background.imageFileId && (
           <img
             src={`${BASE}/download/${background.imageFileId}`}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-            onLoad={handleLoad}
-            onError={handleLoad}
+            onLoad={handleAssetLoad}
+            onError={handleAssetLoad}
           />
         )}
 
-        {sortedItems.map((item) => {
-          const { content, srcW, srcH, fileId, isVideo } = item;
-          const shortSide = Math.min(canvasW, canvasH) * 0.8;
-          const fitScale = srcW > 0 && srcH > 0 ? Math.min(shortSide / srcW, shortSide / srcH) : 1;
-          const dispW = Math.max(4, srcW * fitScale * content.scale);
-          const dispH = Math.max(4, srcH * fitScale * content.scale);
-          const cx = (content.x / 100) * canvasW;
-          const cy = (content.y / 100) * canvasH;
-
-          const br = content.borderRadius;
-          const half = Math.min(dispW, dispH) / 2;
-          // br values are fractions 0–1; multiply by half to get CSS pixels.
-          // This matches EditorCanvas and scales correctly at any export resolution.
-          const borderRadiusCss = br.linked
-            ? `${br.all * half}px`
-            : `${br.tl * half}px ${br.tr * half}px ${br.br * half}px ${br.bl * half}px`;
-
-          const sh = content.shadow;
-          const shadowCss = sh.opacity > 0
-            ? `${sh.x}px ${sh.y}px ${sh.blur}px ${sh.spread}px ${hexToRgba(sh.color, sh.opacity)}`
-            : 'none';
-
-          return (
-            <div
-              key={item.id}
-              style={{
-                position: 'absolute',
-                width: dispW,
-                height: dispH,
-                left: cx,
-                top: cy,
-                transform: `translate(-50%,-50%) rotate(${content.rotation}deg)`,
-                borderRadius: borderRadiusCss,
-                overflow: 'hidden',
-                opacity: content.opacity,
-                boxShadow: shadowCss,
-              }}
-            >
-              {isVideo
-                ? (
-                  <video
-                    src={`${BASE}/download/${fileId}`}
-                    autoPlay={false}
-                    muted
-                    playsInline
-                    style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
-                    onLoadedData={handleLoad}
-                    onError={handleLoad}
-                  />
-                )
-                : (
-                  <img
-                    src={`${BASE}/download/${fileId}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
-                    onLoad={handleLoad}
-                    onError={handleLoad}
-                  />
-                )}
-            </div>
-          );
-        })}
+        {sortedItems.map((item) => (
+          <ItemView
+            key={item.id}
+            item={item}
+            canvasW={canvasW}
+            canvasH={canvasH}
+            time={time}
+            registerVideo={(el) => { if (el) videosRef.current.set(item.id, el); else videosRef.current.delete(item.id); }}
+            onAssetLoad={handleAssetLoad}
+          />
+        ))}
       </div>
 
       {ready && <div id="render-ready" />}
+    </div>
+  );
+}
+
+// ── Single item ───────────────────────────────────────────────────────────────
+
+function ItemView({ item, canvasW, canvasH, time, registerVideo, onAssetLoad }: {
+  item: PuppeteerItem;
+  canvasW: number;
+  canvasH: number;
+  time: number;
+  registerVideo: (el: HTMLVideoElement | null) => void;
+  onAssetLoad: () => void;
+}) {
+  const { content, srcW, srcH, fileId, isVideo, keyframes, hideMedia } = item;
+
+  // Interpolate exactly like the preview when this item is animated.
+  const anim = keyframes && keyframes.length >= 2 ? interpolateProps(keyframes, time) : null;
+  const live = applyAnimatedProps(content, anim);
+  const { dispW, dispH, cx, cy, borderRadiusCss } = computeItemLayout(live, srcW, srcH, canvasW, canvasH);
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        width: dispW, height: dispH, left: cx, top: cy,
+        transform: `translate(-50%,-50%) rotate(${live.rotation}deg)`,
+        borderRadius: borderRadiusCss,
+        overflow: 'hidden',
+        opacity: live.opacity,
+        boxShadow: shadowCss(live.shadow),
+      }}
+    >
+      {hideMedia
+        ? null
+        : isVideo
+        ? (
+          <video
+            ref={registerVideo}
+            src={`${BASE}/download/${fileId}`}
+            autoPlay={false}
+            muted
+            playsInline
+            preload="auto"
+            onLoadedData={onAssetLoad}
+            onError={onAssetLoad}
+            style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
+          />
+        )
+        : (
+          <img
+            src={`${BASE}/download/${fileId}`}
+            onLoad={onAssetLoad}
+            onError={onAssetLoad}
+            style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
+          />
+        )}
     </div>
   );
 }

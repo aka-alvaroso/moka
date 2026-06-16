@@ -2,9 +2,9 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import type { EditorState } from '../hooks/useEditor';
 import type { ContentOptions, MediaItem, AnimatedProps } from '@mockup-forge/shared';
-import { meshToCss } from './MeshEditor';
 import { uploadFile, fetchMediaInfo } from '../lib/api';
 import { useTheme } from '../context/ThemeContext';
+import { backgroundCss, computeItemLayout, applyAnimatedProps, shadowCss } from '../render/layout';
 
 const RATIO_MAP: Record<string, number> = {
   '1:1': 1, '16:9': 16 / 9, '4:5': 4 / 5, '9:16': 9 / 16, '4:3': 4 / 3,
@@ -15,28 +15,7 @@ function canvasAspectRatio(canvas: { ratio: string; width?: number; height?: num
   return RATIO_MAP[canvas.ratio] ?? 1;
 }
 
-function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.substring(0, 2), 16) || 0;
-  const g = parseInt(h.substring(2, 4), 16) || 0;
-  const b = parseInt(h.substring(4, 6), 16) || 0;
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
 const SNAP_THRESHOLD = 2.5;
-
-function backgroundCss(bg: EditorState['background']): React.CSSProperties {
-  switch (bg.type) {
-    case 'solid': return { background: bg.color || '#1a1a2e' };
-    case 'gradient': {
-      const { from = '#1a1a2e', to = '#16213e', direction = 135 } = bg.gradient ?? {};
-      return { background: `linear-gradient(${direction}deg,${from},${to})` };
-    }
-    case 'mesh': return { background: bg.mesh ? meshToCss(bg.mesh) : '#0f0c29' };
-    case 'transparent': return { background: 'repeating-conic-gradient(#1c1c1f 0% 25%,#141416 0% 50%) 0 0/20px 20px' };
-    default: return { background: '#1a1a2e' };
-  }
-}
 
 type DragMode = 'move' | 'resize' | 'rotate' | 'radius' | 'shadow' | null;
 
@@ -181,7 +160,7 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
       <div
         ref={canvasRef}
         className="relative overflow-hidden rounded-xl shrink-0"
-        style={{ width: cw, height: ch, ...backgroundCss(background) }}
+        style={{ width: cw, height: ch, ...backgroundCss(background, 'checkerboard') }}
         onMouseDown={() => onItemSelected(null)}
       >
         {/* Drop overlay */}
@@ -256,34 +235,11 @@ interface LayerProps {
 }
 
 function ItemLayer({ item, cw, ch, selected, animatedProps, isAnimating, canvasRef, dragRef, onSelect, onContentChange }: LayerProps) {
-  const live = animatedProps ? {
-    ...item.content,
-    x: animatedProps.x, y: animatedProps.y, scale: animatedProps.scale,
-    rotation: animatedProps.rotation, opacity: animatedProps.opacity,
-    borderRadius: { ...item.content.borderRadius, linked: true, all: animatedProps.borderRadius, tl: animatedProps.borderRadius, tr: animatedProps.borderRadius, br: animatedProps.borderRadius, bl: animatedProps.borderRadius },
-  } : item.content;
-
-  const shortSide = Math.min(cw, ch) * 0.8;
-  const fitScale = item.srcW > 0 && item.srcH > 0 ? Math.min(shortSide / item.srcW, shortSide / item.srcH) : 1;
-  const dispW = Math.max(4, item.srcW * fitScale * live.scale);
-  const dispH = Math.max(4, item.srcH * fitScale * live.scale);
-  const cx = (live.x / 100) * cw;
-  const cy = (live.y / 100) * ch;
-
-  const br = live.borderRadius;
-  const half = Math.min(dispW, dispH) / 2;
-  // br values are fractions 0–1; multiply by half to get actual CSS pixels.
-  // This ensures the radius scales correctly at any export resolution.
-  const rFrac = br.linked ? br.all : Math.max(br.tl, br.tr, br.br, br.bl);
+  // Shared geometry/CSS — identical to the export path (RenderView).
+  const live = applyAnimatedProps(item.content, animatedProps);
+  const { dispW, dispH, cx, cy, half, rFrac, borderRadiusCss } = computeItemLayout(live, item.srcW, item.srcH, cw, ch);
   const r = rFrac * half;
-  const borderRadiusCss = br.linked
-    ? `${br.all * half}px`
-    : `${br.tl * half}px ${br.tr * half}px ${br.br * half}px ${br.bl * half}px`;
-
-  const sh = live.shadow;
-  const shadowCss = sh.opacity > 0
-    ? `${sh.x}px ${sh.y}px ${sh.blur}px ${sh.spread}px ${hexToRgba(sh.color, sh.opacity)}`
-    : 'none';
+  const itemShadowCss = shadowCss(live.shadow);
 
   const startDrag = (mode: DragMode, e: React.MouseEvent) => {
     e.preventDefault();
@@ -323,7 +279,7 @@ function ItemLayer({ item, cw, ch, selected, animatedProps, isAnimating, canvasR
           transform: `translate(-50%,-50%) rotate(${live.rotation}deg)`,
           borderRadius: borderRadiusCss, overflow: 'hidden',
           opacity: live.opacity, cursor: selected ? 'move' : 'pointer',
-          boxShadow: shadowCss,
+          boxShadow: itemShadowCss,
           transition: animatedProps ? 'none' : 'box-shadow 0.15s',
           pointerEvents: 'auto',
         }}

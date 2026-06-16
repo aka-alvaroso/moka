@@ -1,6 +1,10 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import type { MeshBlob, MeshConfig } from '@mockup-forge/shared';
 import { useTheme } from '../context/ThemeContext';
+import { meshToCss } from '../render/mesh';
+
+// Re-exported for existing importers (LeftPanel, …); canonical home is render/mesh.
+export { meshToCss };
 
 // ── Presets ───────────────────────────────────────────────────────────────────
 
@@ -72,18 +76,6 @@ export const MESH_PRESETS: { name: string; config: MeshConfig }[] = [
     },
   },
 ];
-
-// ── CSS helper ────────────────────────────────────────────────────────────────
-
-export function meshToCss(mesh: MeshConfig): string {
-  const layers = mesh.blobs.map((b) => {
-    const r = parseInt(b.color.slice(1, 3), 16);
-    const g = parseInt(b.color.slice(3, 5), 16);
-    const bv = parseInt(b.color.slice(5, 7), 16);
-    return `radial-gradient(circle at ${b.x}% ${b.y}%, rgba(${r},${g},${bv},${b.opacity}) 0%, transparent ${b.size}%)`;
-  });
-  return [...layers, mesh.base].join(', ');
-}
 
 // ── Unique id ─────────────────────────────────────────────────────────────────
 
