@@ -316,6 +316,27 @@ function BackgroundSection({ background, onBackground }: { background: Backgroun
               <ColorSwatch value={background.gradient?.to || '#16213e'} onChange={(v) => onBackground({ type: 'gradient', gradient: { ...background.gradient!, to: v } })} />
             </div>
           </Row>
+          <Row label="Direction">
+            <div style={{ display: 'flex', gap: 6 }}>
+              {([
+                { deg: 180, title: 'Top to bottom', path: 'M12 5v14M8 15l4 4 4-4' },
+                { deg: 0,   title: 'Bottom to top', path: 'M12 19V5M8 9l4-4 4 4' },
+                { deg: 90,  title: 'Left to right', path: 'M5 12h14M15 8l4 4-4 4' },
+                { deg: 270, title: 'Right to left', path: 'M19 12H5M9 8l-4 4 4 4' },
+              ] as const).map(({ deg, title, path }) => {
+                const active = (background.gradient?.direction ?? 135) === deg;
+                return (
+                  <button key={deg} title={title}
+                    onClick={() => onBackground({ type: 'gradient', gradient: { ...background.gradient!, direction: deg } })}
+                    style={{ width: 30, height: 30, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? colors.accent : colors.bgInput, transition: 'background 0.12s' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={active ? '#fff' : colors.fgDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d={path} />
+                    </svg>
+                  </button>
+                );
+              })}
+            </div>
+          </Row>
           <RowSlider label="Angle" value={background.gradient?.direction ?? 135} min={0} max={360} unit="°"
             onChange={(v) => onBackground({ type: 'gradient', gradient: { ...background.gradient!, direction: v } })} />
         </div>
