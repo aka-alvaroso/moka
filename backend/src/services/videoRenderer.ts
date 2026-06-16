@@ -3,11 +3,10 @@ import ffmpegStatic from 'ffmpeg-static';
 // @ts-ignore — ffprobe-static has no bundled types
 import ffprobeStatic from 'ffprobe-static';
 import sharp from 'sharp';
-import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { tmpPath } from './fileManager';
-import { makeBackground } from './imageRenderer';
-import type { RenderPayload } from '@mockup-forge/shared';
+import { screenshotRenderState } from './puppeteerRenderer';
+import type { PuppeteerRenderState, RenderPayload } from '@mockup-forge/shared';
 
 if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
 if (ffprobeStatic?.path) ffmpeg.setFfprobePath(ffprobeStatic.path);
@@ -61,9 +60,9 @@ export async function renderVideo(payload: RenderPayload): Promise<string> {
   const posX = cx - Math.round(vidW / 2);
   const posY = cy - Math.round(vidH / 2);
 
-  // 4. Render background as PNG (sharp)
-  const bgPath = tmpPath(`bg_${uuidv4()}.png`);
-  await renderBackgroundToDisk(payload, cw, ch, bgPath);
+  // 4. Render background via Puppeteer — same engine as preview, always pixel-perfect
+  const bgFilename = await renderBackgroundViaPuppeteer(payload, cw, ch);
+  const bgPath = tmpPath(bgFilename);
 
   // 5. Build FFmpeg filter graph
   // Inputs: [0] background image, [1] user video
@@ -132,11 +131,19 @@ async function probeVideo(filePath: string): Promise<{ width: number; height: nu
   });
 }
 
-async function renderBackgroundToDisk(
-  payload: RenderPayload, cw: number, ch: number, outPath: string
-): Promise<void> {
-  const buf = await makeBackground(payload, cw, ch);
-  await sharp(buf).png().toFile(outPath);
+// Render just the background via Puppeteer (no media items) so it's identical
+// to what the browser preview shows — gradient, mesh, image all handled by CSS.
+async function renderBackgroundViaPuppeteer(
+  payload: RenderPayload, cw: number, ch: number,
+): Promise<string> {
+  const state: PuppeteerRenderState = {
+    items: [],
+    background: payload.background,
+    canvas: payload.canvas,
+    canvasW: cw,
+    canvasH: ch,
+  };
+  return screenshotRenderState(state, 'png');
 }
 
 async function buildRoundedMaskPng(w: number, h: number, r: number): Promise<string> {
