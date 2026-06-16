@@ -64,7 +64,9 @@ function renderMeshPixels(mesh: MeshConfig, cw: number, ch: number): Buffer {
     for (let x = 0; x < cw; x++) {
       let r = base.r, g = base.g, b = base.b;
 
-      for (let i = 0; i < blobs.length; i++) {
+      // Iterate in reverse so blob[0] is composited last (on top), matching
+      // CSS where the first background layer is the topmost.
+      for (let i = blobs.length - 1; i >= 0; i--) {
         const blob = blobs[i];
         const radius = blobRadii[i];
         const dx   = x - (blob.x / 100) * cw;
@@ -115,12 +117,14 @@ export async function makeBackground(
     const grad = background.gradient ?? { from: '#1a1a2e', to: '#16213e', direction: 135 };
     const { r: r1, g: g1, b: b1 } = hexToRgb(grad.from);
     const { r: r2, g: g2, b: b2 } = hexToRgb(grad.to);
+    // CSS linear-gradient angles are clockwise from top, so the gradient axis
+    // direction vector in screen coords (y-down) is (sin θ, -cos θ).
     const angle = (grad.direction * Math.PI) / 180;
-    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const sinA = Math.sin(angle), cosA = Math.cos(angle);
     const pixels = Buffer.alloc(cw * ch * 3);
     for (let y = 0; y < ch; y++) {
       for (let x = 0; x < cw; x++) {
-        const t = Math.min(1, Math.max(0, 0.5 + (x / cw - 0.5) * cos + (y / ch - 0.5) * sin));
+        const t = Math.min(1, Math.max(0, 0.5 + (x / cw - 0.5) * sinA - (y / ch - 0.5) * cosA));
         const i = (y * cw + x) * 3;
         pixels[i]     = Math.round(r1 + (r2 - r1) * t);
         pixels[i + 1] = Math.round(g1 + (g2 - g1) * t);
