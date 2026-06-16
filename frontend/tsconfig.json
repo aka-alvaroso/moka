@@ -11,7 +11,13 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "strict": true
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      // Resolve the workspace package from its TS source (mirrors the Vite
+      // alias) so type-checking never depends on a freshly built shared/dist.
+      "@mockup-forge/shared": ["../shared/src/index.ts"]
+    }
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"]
