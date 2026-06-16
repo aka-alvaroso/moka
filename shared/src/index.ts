@@ -129,6 +129,13 @@ export interface PuppeteerItem {
   srcH: number;
   content: ContentOptions;
   zIndex: number;
+  // When present (≥2 keyframes) the render view interpolates `content` at the
+  // state's `time`, using the SAME easing/interpolation as the live preview.
+  keyframes?: AnimationKeyframe[];
+  // Plate mode: render the styled box (shadow, radius, rotation) but NOT the
+  // media fill. Used by the hybrid video renderer to capture the static scene
+  // once and let FFmpeg composite the moving video into the transparent hole.
+  hideMedia?: boolean;
 }
 
 export interface PuppeteerRenderState {
@@ -137,6 +144,9 @@ export interface PuppeteerRenderState {
   canvas: CanvasConfig;
   canvasW: number;
   canvasH: number;
+  // Timeline position (seconds) for this frame. Drives keyframe interpolation
+  // and per-video seeking so a captured frame matches the preview at that time.
+  time?: number;
 }
 
 // ── API payloads ──────────────────────────────────────────────────────────────
@@ -178,6 +188,43 @@ export interface UploadResponse {
 export interface RenderResponse {
   fileId: string;
   downloadUrl: string;
+}
+
+// ── Scene geometry (single source of truth) ───────────────────────────────────
+//
+// Pure numeric mapping of a source asset onto the canvas. Lives here so the
+// frontend layout module (CSS) AND the backend hybrid video compositor (FFmpeg
+// overlay coordinates) compute the EXACT same box — no drift between preview and
+// export. `content` must already have any animation folded in.
+
+export interface ItemGeometry {
+  dispW: number;  // displayed width  in canvas px
+  dispH: number;  // displayed height in canvas px
+  cx: number;     // centre x in canvas px
+  cy: number;     // centre y in canvas px
+  half: number;   // min(dispW,dispH)/2 — radius reference
+  rFrac: number;  // effective border-radius fraction (0–1)
+}
+
+export function computeItemGeometry(
+  content: ContentOptions,
+  srcW: number, srcH: number,
+  cw: number, ch: number,
+): ItemGeometry {
+  const shortSide = Math.min(cw, ch) * 0.8;
+  const fitScale = srcW > 0 && srcH > 0
+    ? Math.min(shortSide / srcW, shortSide / srcH)
+    : 1;
+  const dispW = Math.max(4, srcW * fitScale * content.scale);
+  const dispH = Math.max(4, srcH * fitScale * content.scale);
+  const cx = (content.x / 100) * cw;
+  const cy = (content.y / 100) * ch;
+
+  const br = content.borderRadius;
+  const half = Math.min(dispW, dispH) / 2;
+  const rFrac = br.linked ? br.all : Math.max(br.tl, br.tr, br.br, br.bl);
+
+  return { dispW, dispH, cx, cy, half, rFrac };
 }
 
 // ── Legacy (kept for videoRenderer compatibility) ─────────────────────────────

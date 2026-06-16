@@ -34,6 +34,11 @@ const renderLimiter = rateLimit({
   message: { error: 'Too many render requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  // Only throttle user-triggered POST renders. The GET /render/state/:token
+  // endpoint is polled once per frame by the internal Puppeteer renderer, so a
+  // single animation/video export legitimately makes hundreds of GETs — those
+  // must not count against the limit.
+  skip: (req) => req.method === 'GET',
 });
 
 app.use(express.json({ limit: '2mb' }));
