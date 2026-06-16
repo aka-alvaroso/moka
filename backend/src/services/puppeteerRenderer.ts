@@ -29,6 +29,15 @@ async function getBrowser(): Promise<Browser> {
 
 const RENDERER_URL = process.env.RENDERER_URL ?? 'http://localhost:5173';
 
+// Free the shared Chrome instance — called before the long FFmpeg encode of the
+// hybrid path so the (idle) browser's RAM is available to ffmpeg on small hosts.
+// getBrowser() relaunches lazily on the next render.
+export async function closeBrowser(): Promise<void> {
+  const b = _browser;
+  _browser = null;
+  if (b) { try { await b.close(); } catch { /* already gone */ } }
+}
+
 export async function screenshotRenderState(
   state: PuppeteerRenderState,
   format: 'png' | 'jpg',

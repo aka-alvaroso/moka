@@ -20,7 +20,7 @@ import ffmpegStatic from 'ffmpeg-static';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import { tmpPath } from './fileManager';
-import { screenshotRenderState } from './puppeteerRenderer';
+import { screenshotRenderState, closeBrowser } from './puppeteerRenderer';
 import {
   renderFrames, getCanvasSize, resolutionScale, probeMedia,
 } from './frameRenderer';
@@ -142,9 +142,17 @@ async function renderVideoHybrid(
   const maskIdx = maskPath ? nextInput++ : -1;
   const topIdx = topPlatePath ? nextInput++ : -1;
 
+  // rgba is only needed when we actually touch the video's alpha (rounded mask,
+  // partial opacity or rotation with transparent corners). For a plain overlay it
+  // just doubles memory — skip it. This matters on RAM-constrained hosts.
+  const needsAlpha = !!maskPath || opacity < 1 || rotation !== 0;
+
   const filters: string[] = [];
   let v = '[1:v]';
-  filters.push(`${v}scale=${dispW}:${dispH},format=rgba[v0]`); v = '[v0]';
+  filters.push(needsAlpha
+    ? `${v}scale=${dispW}:${dispH},format=rgba[v0]`
+    : `${v}scale=${dispW}:${dispH}[v0]`);
+  v = '[v0]';
 
   if (maskPath) {
     filters.push(`[${maskIdx}:v]alphaextract[mk]`);
@@ -192,6 +200,9 @@ async function renderVideoHybrid(
   // the process is OOM-killed (stuck at frame=0). Matching fps keeps it lockstep.
   const r = fps > 0 && Number.isFinite(fps) ? fps.toFixed(3) : '30';
 
+  // Plates are captured; release Chrome's RAM before the heavy ffmpeg encode.
+  await closeBrowser();
+
   await new Promise<void>((resolve, reject) => {
     const cmd = ffmpeg()
       // Bound the looping plate to the video length as a hard safety net on top
@@ -208,6 +219,7 @@ async function renderVideoHybrid(
       // Constant output framerate + bounded muxer queue: defend against VFR/B-frame
       // sources that otherwise stall or balloon memory in the filter graph.
       '-fps_mode cfr', `-r ${r}`, '-max_muxing_queue_size 1024',
+      '-threads 2',
       '-movflags +faststart',
       ...(audioFromFile ? ['-map 1:a?', '-c:a aac'] : []),
       '-shortest',
