@@ -194,8 +194,8 @@ export default function App() {
 
           {/* Footer */}
           <footer style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '8px 24px', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 16, padding: '8px 24px', flexShrink: 0,
             borderTop: `1px solid ${colors.divider}`, marginTop: 12,
           }}>
             {/* Settings button */}
@@ -249,33 +249,29 @@ export default function App() {
               )}
             </div>
 
-            {/* Center links */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <span style={{ fontSize: 11, color: colors.fgSubtle, whiteSpace: 'nowrap' }}>
-                Made with <span style={{ color: ACCENT }}>♥</span> by{' '}
-                <a href="https://alvaroso.dev" target="_blank" rel="noopener noreferrer"
-                  style={{ color: colors.fgDim, textDecoration: 'none', fontWeight: 600 }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = colors.fgDim)}
-                >@aka_alvaroso</a>
-              </span>
-              <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
-              <a href="https://github.com/aka-alvaroso/moka" target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'center', gap: 5, color: colors.fgSubtle, textDecoration: 'none', fontSize: 11 }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = colors.fgDim; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgSubtle; }}
-              >
-                <GitHubIcon /> Source code
-              </a>
-              <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
-              <span style={{ display: 'flex', gap: 10, fontSize: 11 }}>
-                <FooterBtn onClick={() => setLegalPage('privacy')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Privacy</FooterBtn>
-                <FooterBtn onClick={() => setLegalPage('terms')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Terms</FooterBtn>
-              </span>
-            </div>
+            <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
 
-            {/* Right spacer to balance settings button */}
-            <div style={{ width: 90 }} />
+            <span style={{ fontSize: 11, color: colors.fgSubtle, whiteSpace: 'nowrap' }}>
+              Made with <span style={{ color: ACCENT }}>♥</span> by{' '}
+              <a href="https://alvaroso.dev" target="_blank" rel="noopener noreferrer"
+                style={{ color: colors.fgDim, textDecoration: 'none', fontWeight: 600 }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
+                onMouseLeave={(e) => (e.currentTarget.style.color = colors.fgDim)}
+              >@aka_alvaroso</a>
+            </span>
+            <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
+            <a href="https://github.com/aka-alvaroso/moka" target="_blank" rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 5, color: colors.fgSubtle, textDecoration: 'none', fontSize: 11 }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = colors.fgDim; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgSubtle; }}
+            >
+              <GitHubIcon /> Source code
+            </a>
+            <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
+            <span style={{ display: 'flex', gap: 10, fontSize: 11 }}>
+              <FooterBtn onClick={() => setLegalPage('privacy')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Privacy</FooterBtn>
+              <FooterBtn onClick={() => setLegalPage('terms')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Terms</FooterBtn>
+            </span>
           </footer>
         </div>
 

@@ -293,9 +293,10 @@ function RowSlider({ label, value, min, max, unit = '', onChange }: {
 }
 
 function ColorSwatch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { colors } = useTheme();
   return (
     <label style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
-      <span style={{ display: 'block', width: 28, height: 28, borderRadius: 8, background: value }} />
+      <span style={{ display: 'block', width: 28, height: 28, borderRadius: 8, background: value, boxShadow: `inset 0 0 0 1px rgba(0,0,0,0.15), 0 0 0 1px ${colors.presetRing}` }} />
       <input type="color" value={value} onChange={(e) => onChange(e.target.value)}
         style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
     </label>

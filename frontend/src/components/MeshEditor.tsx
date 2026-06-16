@@ -210,7 +210,7 @@ export function MeshEditor({ value, onChange }: Props) {
       <div className="flex items-center gap-2">
         {/* Base color */}
         <label className="relative cursor-pointer shrink-0" title="Base color">
-          <span className="block w-7 h-7 rounded-lg" style={{ background: value.base }} />
+          <span className="block w-7 h-7 rounded-lg" style={{ background: value.base, boxShadow: `inset 0 0 0 1px rgba(0,0,0,0.15), 0 0 0 1px ${colors.presetRing}` }} />
           <input type="color" value={value.base}
             onChange={(e) => onChange({ ...value, base: e.target.value })}
             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
@@ -291,7 +291,7 @@ function BlobControls({ blob, onDelete, onUpdate }: {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: colors.bgRow, borderRadius: 11 }}>
         <span style={{ fontSize: 12, color: colors.fgDim, fontWeight: 500 }}>Color</span>
         <label style={{ position: 'relative', cursor: 'pointer' }}>
-          <span style={{ display: 'block', width: 28, height: 28, borderRadius: 8, background: blob.color }} />
+          <span style={{ display: 'block', width: 28, height: 28, borderRadius: 8, background: blob.color, boxShadow: `inset 0 0 0 1px rgba(0,0,0,0.15), 0 0 0 1px ${colors.presetRing}` }} />
           <input type="color" value={blob.color}
             onChange={(e) => onUpdate({ color: e.target.value })}
             style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
