@@ -39,6 +39,14 @@ export function RenderView() {
   const loadedRef = useRef(0);
   const totalRef = useRef(0);
 
+  // index.css paints body black; clear it so Puppeteer's omitBackground can
+  // capture transparent "top plate" screenshots (layers above a video). This
+  // page is only ever the off-screen export target, so it's always safe.
+  useEffect(() => {
+    document.documentElement.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+  }, []);
+
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get('token');
     if (!token) return;

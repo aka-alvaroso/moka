@@ -32,6 +32,7 @@ const RENDERER_URL = process.env.RENDERER_URL ?? 'http://localhost:5173';
 export async function screenshotRenderState(
   state: PuppeteerRenderState,
   format: 'png' | 'jpg',
+  opts: { omitBackground?: boolean } = {},
 ): Promise<string> {
   const token = storeRenderState(state);
   const url = `${RENDERER_URL}/render?token=${token}`;
@@ -52,8 +53,12 @@ export async function screenshotRenderState(
     const element = await page.$('[data-export-canvas]');
     if (!element) throw new Error('Canvas element not found in render view');
 
+    // omitBackground keeps the PNG transparent where the scene has no content —
+    // needed for the "top plate" (layers above a video) so it composites cleanly.
     const screenshot = await element.screenshot(
-      format === 'jpg' ? { type: 'jpeg', quality: 92 } : { type: 'png' },
+      format === 'jpg'
+        ? { type: 'jpeg', quality: 92 }
+        : { type: 'png', omitBackground: opts.omitBackground ?? false },
     );
 
     const ext = format === 'jpg' ? 'jpg' : 'png';
@@ -65,7 +70,10 @@ export async function screenshotRenderState(
   }
 }
 
-const RENDER_CONCURRENCY = Math.max(1, Number(process.env.RENDER_CONCURRENCY ?? 4));
+// Each parallel page streams the scene's video(s) over HTTP and holds the
+// connection open. Too many at once starves Chrome's ~6-connections-per-host
+// budget and aborts video loads, so keep this conservative (override per host).
+const RENDER_CONCURRENCY = Math.max(1, Number(process.env.RENDER_CONCURRENCY ?? 2));
 
 export interface CaptureOptions {
   frameDir: string;
@@ -103,8 +111,8 @@ export async function captureFrameSequence(
       page.on('requestfailed', (req) => console.error('[puppeteer:requestfailed]', req.url(), req.failure()?.errorText));
 
       await page.setViewport({ width: state.canvasW + 200, height: state.canvasH + 200 });
-      await page.goto(url, { waitUntil: 'load', timeout: 30_000 });
-      await page.waitForFunction('window.__mokaReady === true', { timeout: 30_000 });
+      await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
+      await page.waitForFunction('window.__mokaReady === true', { timeout: 60_000 });
 
       const element = (await page.$('[data-export-canvas]')) as ElementHandle<Element> | null;
       if (!element) throw new Error('Canvas element not found in render view');

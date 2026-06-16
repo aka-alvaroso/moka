@@ -48,14 +48,13 @@ export async function renderVideo(payload: MultiRenderPayload): Promise<string> 
   }
   if (durationSec <= 0) durationSec = 5;
 
-  // Hybrid fast path: a single video layer that is the top-most layer. Anything
-  // rendered above the video would be covered by the FFmpeg overlay, so those
-  // cases fall back to the fully general frame-capture renderer.
+  // Hybrid fast path: any scene with exactly ONE video layer. Static layers below
+  // the video are baked into a bottom plate, static layers above into a top plate,
+  // and FFmpeg only composites the video between them — no per-frame browser
+  // capture, no streaming the video into N pages. Multi-video scenes still fall
+  // back to the fully general frame-capture renderer.
   const videoLayers = payload.items.filter((i) => i.isVideo);
-  const topZ = Math.max(...payload.items.map((i) => i.zIndex));
-  const hybridVideo = videoLayers.length === 1 && videoLayers[0].zIndex === topZ
-    ? videoLayers[0]
-    : null;
+  const hybridVideo = videoLayers.length === 1 ? videoLayers[0] : null;
 
   if (hybridVideo) {
     return renderVideoHybrid(payload, hybridVideo, canvasW, canvasH, durationSec, audioFromFile);
@@ -84,17 +83,35 @@ async function renderVideoHybrid(
   durationSec: number,
   audioFromFile: string | undefined,
 ): Promise<string> {
-  // 1. Static plate: full scene, but the video shows no media (just its shadow +
-  //    a transparent hole). Captured once via the shared CSS engine.
-  const plateState: PuppeteerRenderState = {
-    items: payload.items.map((it) => ({ ...toPuppeteerItem(it), hideMedia: it.id === video.id })),
+  // Split the static layers around the video by stacking order.
+  const others = payload.items.filter((it) => it.id !== video.id);
+  const aboveItems = others.filter((it) => it.zIndex > video.zIndex);
+  const belowItems = others.filter((it) => it.zIndex <= video.zIndex);
+
+  // 1a. Bottom plate: background + layers below the video + the video's own shadow
+  //     (the video is hidden, leaving a hole the FFmpeg overlay fills).
+  const bottomState: PuppeteerRenderState = {
+    items: [...belowItems.map(toPuppeteerItem), { ...toPuppeteerItem(video), hideMedia: true }],
     background: payload.background,
     canvas: payload.canvas,
     canvasW, canvasH,
     time: 0,
   };
-  const platePng = await screenshotRenderState(plateState, 'png');
-  const platePath = tmpPath(platePng);
+  const platePath = tmpPath(await screenshotRenderState(bottomState, 'png'));
+
+  // 1b. Top plate (only if layers sit above the video): those layers on a
+  //     transparent canvas, composited over the video at the very end.
+  let topPlatePath: string | null = null;
+  if (aboveItems.length > 0) {
+    const topState: PuppeteerRenderState = {
+      items: aboveItems.map(toPuppeteerItem),
+      background: { type: 'transparent' },
+      canvas: payload.canvas,
+      canvasW, canvasH,
+      time: 0,
+    };
+    topPlatePath = tmpPath(await screenshotRenderState(topState, 'png', { omitBackground: true }));
+  }
 
   // 2. Video geometry — SAME formula as the preview (shared module).
   const g = computeItemGeometry(video.content, video.srcW, video.srcH, canvasW, canvasH);
@@ -115,13 +132,19 @@ async function renderVideoHybrid(
     )).png().toFile(maskPath);
   }
 
-  // 4. Build filter graph: scale → [round] → [opacity] → [rotate] → overlay on plate.
+  // 4. Build filter graph: scale → [round] → [opacity] → [rotate] → overlay on the
+  //    bottom plate → [overlay top plate] → output.
+  // Input indices: 0 = bottom plate, 1 = video, then mask / top plate as present.
+  let nextInput = 2;
+  const maskIdx = maskPath ? nextInput++ : -1;
+  const topIdx = topPlatePath ? nextInput++ : -1;
+
   const filters: string[] = [];
   let v = '[1:v]';
   filters.push(`${v}scale=${dispW}:${dispH},format=rgba[v0]`); v = '[v0]';
 
   if (maskPath) {
-    filters.push(`[2:v]alphaextract[mk]`);
+    filters.push(`[${maskIdx}:v]alphaextract[mk]`);
     filters.push(`${v}[mk]alphamerge[v1]`); v = '[v1]';
   }
   if (opacity < 1) {
@@ -148,8 +171,13 @@ async function renderVideoHybrid(
   // shortest=1 ends the overlay when the VIDEO ends, regardless of audio. Without
   // it the looping plate ([0:v] -loop 1) would drive an infinite output whenever
   // the source has no audio track to bound `-shortest`.
-  filters.push(`[0:v]${v}overlay=${ox}:${oy}:shortest=1:format=auto[ov]`);
-  filters.push(`[ov]scale=trunc(iw/2)*2:trunc(ih/2)*2[out]`);
+  filters.push(`[0:v]${v}overlay=${ox}:${oy}:shortest=1:format=auto[base]`);
+  let last = 'base';
+  if (topIdx >= 0) {
+    filters.push(`[base][${topIdx}:v]overlay=0:0:shortest=1:format=auto[withtop]`);
+    last = 'withtop';
+  }
+  filters.push(`[${last}]scale=trunc(iw/2)*2:trunc(ih/2)*2[out]`);
 
   // 5. Encode.
   const outputFilename = `vid_${uuidv4()}.mp4`;
@@ -162,6 +190,7 @@ async function renderVideoHybrid(
       .input(platePath).inputOptions(['-loop 1', `-t ${durationSec}`])
       .input(tmpPath(video.fileId));
     if (maskPath) cmd.input(maskPath);
+    if (topPlatePath) cmd.input(topPlatePath).inputOptions(['-loop 1', `-t ${durationSec}`]);
 
     const out = [
       '-map [out]',
