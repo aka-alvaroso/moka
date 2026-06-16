@@ -49,7 +49,14 @@ export function resolutionScale(resolution?: '1x' | '2x' | '3x'): number {
 
 // ── Media probing ─────────────────────────────────────────────────────────────
 
-export interface MediaInfo { width: number; height: number; duration: number; hasAudio: boolean }
+export interface MediaInfo { width: number; height: number; duration: number; hasAudio: boolean; fps: number }
+
+function parseFps(rate?: string): number {
+  if (!rate) return 0;
+  const [n, d] = rate.split('/').map(Number);
+  if (!n) return 0;
+  return d ? n / d : n;
+}
 
 export function probeMedia(fileId: string): Promise<MediaInfo> {
   return new Promise((resolve, reject) => {
@@ -58,7 +65,8 @@ export function probeMedia(fileId: string): Promise<MediaInfo> {
       const v = data.streams.find((s) => s.codec_type === 'video');
       const hasAudio = data.streams.some((s) => s.codec_type === 'audio');
       const duration = Number(data.format?.duration ?? v?.duration ?? 0) || 0;
-      resolve({ width: v?.width ?? 0, height: v?.height ?? 0, duration, hasAudio });
+      const fps = parseFps(v?.avg_frame_rate) || parseFps(v?.r_frame_rate) || 30;
+      resolve({ width: v?.width ?? 0, height: v?.height ?? 0, duration, hasAudio, fps });
     });
   });
 }
