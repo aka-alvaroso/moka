@@ -3,6 +3,17 @@ packages:
   - backend
   - shared
 
+# Force patched versions of transitive deps with known CVEs that the direct
+# packages (tsx, vite, puppeteer) still pin to vulnerable ranges.
+# NOTE: esbuild is intentionally NOT overridden — vite 6.4 is incompatible with
+# esbuild >=0.28 (build fails on the es2020 transform target). Its remaining
+# advisories are dev-server-only and do not affect the production runtime.
+overrides:
+  ws: '>=8.21.0'           # memory-exhaustion DoS (puppeteer devtools transport, runtime)
+  shell-quote: '>=1.8.4'   # CWE-77/78 newline escaping (via concurrently, dev)
+  js-yaml: '>=4.1.2'       # quadratic-complexity DoS (via puppeteer>cosmiconfig)
+  '@babel/core': '>=7.29.1' # arbitrary file read via sourceMappingURL (dev)
+
 allowBuilds:
   esbuild: true
   ffmpeg-static: true

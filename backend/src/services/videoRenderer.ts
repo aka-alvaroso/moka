@@ -24,14 +24,19 @@ import { screenshotRenderState, closeBrowser } from './puppeteerRenderer';
 import {
   renderFrames, getCanvasSize, resolutionScale, probeMedia,
 } from './frameRenderer';
+import { PayloadValidationError } from './renderQueue';
 import { computeItemGeometry } from '@mockup-forge/shared';
 import type { MultiRenderPayload, PuppeteerItem, PuppeteerRenderState, RenderItem } from '@mockup-forge/shared';
 
 if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const DEFAULT_FPS = 30;
+const MAX_VIDEO_DURATION = Number(process.env.MAX_RENDER_DURATION ?? 300);
 
-export async function renderVideo(payload: MultiRenderPayload): Promise<string> {
+export async function renderVideo(
+  payload: MultiRenderPayload,
+  signal?: AbortSignal,
+): Promise<string> {
   const baseSize = getCanvasSize(payload.canvas);
   const resScale = resolutionScale(payload.resolution);
   const canvasW = baseSize.w * resScale;
@@ -50,6 +55,12 @@ export async function renderVideo(payload: MultiRenderPayload): Promise<string> 
   }
   if (durationSec <= 0) durationSec = 5;
 
+  if (durationSec > MAX_VIDEO_DURATION) {
+    throw new PayloadValidationError(
+      `Source video too long for render (max ${MAX_VIDEO_DURATION}s, got ${Math.ceil(durationSec)}s)`,
+    );
+  }
+
   // Hybrid fast path: any scene with exactly ONE video layer. Static layers below
   // the video are baked into a bottom plate, static layers above into a top plate,
   // and FFmpeg only composites the video between them — no per-frame browser
@@ -59,7 +70,7 @@ export async function renderVideo(payload: MultiRenderPayload): Promise<string> 
   const hybridVideo = videoLayers.length === 1 ? videoLayers[0] : null;
 
   if (hybridVideo) {
-    return renderVideoHybrid(payload, hybridVideo, canvasW, canvasH, durationSec, videoFps, audioFromFile);
+    return renderVideoHybrid(payload, hybridVideo, canvasW, canvasH, durationSec, videoFps, audioFromFile, signal);
   }
 
   // Fallback — capture the whole scene frame-by-frame (parallelised).
@@ -72,6 +83,7 @@ export async function renderVideo(payload: MultiRenderPayload): Promise<string> 
     durationSec,
     fps: DEFAULT_FPS,
     audioFromFile,
+    signal,
   });
 }
 
@@ -85,6 +97,7 @@ async function renderVideoHybrid(
   durationSec: number,
   fps: number,
   audioFromFile: string | undefined,
+  signal?: AbortSignal,
 ): Promise<string> {
   // Split the static layers around the video by stacking order.
   const others = payload.items.filter((it) => it.id !== video.id);
@@ -100,7 +113,7 @@ async function renderVideoHybrid(
     canvasW, canvasH,
     time: 0,
   };
-  const platePath = tmpPath(await screenshotRenderState(bottomState, 'png'));
+  const platePath = tmpPath(await screenshotRenderState(bottomState, 'png', {}, signal));
 
   // 1b. Top plate (only if layers sit above the video): those layers on a
   //     transparent canvas, composited over the video at the very end.
@@ -113,8 +126,10 @@ async function renderVideoHybrid(
       canvasW, canvasH,
       time: 0,
     };
-    topPlatePath = tmpPath(await screenshotRenderState(topState, 'png', { omitBackground: true }));
+    topPlatePath = tmpPath(await screenshotRenderState(topState, 'png', { omitBackground: true }, signal));
   }
+
+  signal?.throwIfAborted();
 
   // 2. Video geometry — SAME formula as the preview (shared module).
   const g = computeItemGeometry(video.content, video.srcW, video.srcH, canvasW, canvasH);
@@ -225,14 +240,24 @@ async function renderVideoHybrid(
       '-shortest',
     ];
 
+    const onAbort = () => { try { cmd.kill('SIGKILL'); } catch { /* already done */ } };
+    signal?.addEventListener('abort', onAbort, { once: true });
+
     cmd
       .complexFilter(filters.join(';'))
       .outputOptions(out)
       .output(outputPath)
       .on('start', (c) => console.log('[hybrid ffmpeg]', c))
       .on('stderr', (line) => console.log('[hybrid ffmpeg]', line))
-      .on('end', () => resolve())
-      .on('error', (err) => { console.error('[hybrid ffmpeg error]', err.message); reject(err); })
+      .on('end', () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      })
+      .on('error', (err) => {
+        signal?.removeEventListener('abort', onAbort);
+        console.error('[hybrid ffmpeg error]', err.message);
+        reject(err);
+      })
       .run();
   });
 

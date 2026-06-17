@@ -8,7 +8,10 @@
 import type { MultiAnimationRenderPayload, PuppeteerItem } from '@mockup-forge/shared';
 import { renderFrames, getCanvasSize } from './frameRenderer';
 
-export async function renderAnimation(payload: MultiAnimationRenderPayload): Promise<string> {
+export async function renderAnimation(
+  payload: MultiAnimationRenderPayload,
+  signal?: AbortSignal,
+): Promise<string> {
   const { duration, fps, items, background, canvas } = payload;
   const { w: canvasW, h: canvasH } = getCanvasSize(canvas);
 
@@ -30,5 +33,6 @@ export async function renderAnimation(payload: MultiAnimationRenderPayload): Pro
     canvasW, canvasH,
     durationSec: duration,
     fps,
+    signal,
   });
 }

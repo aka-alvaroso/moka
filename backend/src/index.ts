@@ -1,5 +1,6 @@
 import express, { Router } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import { rateLimit } from 'express-rate-limit';
 import { uploadRouter } from './routes/upload';
@@ -14,6 +15,20 @@ const PORT = process.env.PORT || 3001;
 // Trust Caddy/nginx proxy so express-rate-limit reads the real client IP
 // from X-Forwarded-For instead of crashing
 app.set('trust proxy', 1);
+
+// ── Security headers ──────────────────────────────────────────────────────────
+// nosniff, X-Frame-Options: DENY (anti-clickjacking), Referrer-Policy, etc.
+//  • CSP is disabled: the SPA relies on React inline-style attributes, which a
+//    default content-security-policy would block. (The download route already
+//    pins its own Content-Type + nosniff + attachment disposition.)
+//  • CORP is set to cross-origin so the render view / app can still load uploaded
+//    media from the download endpoint across the dev frontend/backend ports.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginEmbedderPolicy: false,
+  frameguard: { action: 'deny' }, // editor is never iframed → block it outright
+}));
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';

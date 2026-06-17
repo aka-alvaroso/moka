@@ -1,12 +1,95 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { renderVideo } from '../services/videoRenderer';
 import { renderAnimation } from '../services/animationRenderer';
 import { screenshotRenderState } from '../services/puppeteerRenderer';
 import { getRenderState } from '../services/renderStateStore';
 import { getCanvasSize, resolutionScale } from '../services/frameRenderer';
+import {
+  enqueueRender, renderQueueStats,
+  QueueFullError, RenderTimeoutError, PayloadValidationError,
+} from '../services/renderQueue';
 import type { MultiRenderPayload, MultiAnimationRenderPayload, PuppeteerRenderState } from '@mockup-forge/shared';
 
 export const renderRouter = Router();
+
+// ── Optional bearer-token auth ────────────────────────────────────────────────
+// Set RENDER_TOKEN in the environment to require callers to present
+// "Authorization: Bearer <token>" on every POST render request.
+// GET /state/:token is intentionally excluded (internal Puppeteer polling).
+
+const RENDER_TOKEN = process.env.RENDER_TOKEN ?? '';
+
+function requireRenderToken(req: Request, res: Response, next: NextFunction) {
+  if (!RENDER_TOKEN) return next();
+  const auth = req.headers['authorization'] ?? '';
+  if (auth === `Bearer ${RENDER_TOKEN}`) return next();
+  res.status(401).json({ error: 'Unauthorized' });
+}
+
+// ── Payload limits ────────────────────────────────────────────────────────────
+// Configurable via env; defaults chosen for a small single-CPU host.
+
+// Maximum total output pixels (width × height after canvas preset + scale).
+// 16 MP covers yt-banner at 2x (5120×2880 = 14.7 MP) while blocking all 3x
+// renders of large presets (yt-banner at 3x = 33 MP).
+const MAX_CANVAS_MPIX   = Number(process.env.MAX_CANVAS_MPIX    ?? 16);
+const MAX_RENDER_DURATION = Number(process.env.MAX_RENDER_DURATION ?? 300); // seconds
+const MAX_RENDER_FPS    = Number(process.env.MAX_RENDER_FPS     ?? 60);
+const MAX_RENDER_FRAMES = Number(process.env.MAX_RENDER_FRAMES  ?? 3600);
+const MAX_RENDER_ITEMS  = Number(process.env.MAX_RENDER_ITEMS   ?? 20);
+
+/**
+ * Validates the final rendered pixel count (preset size × resolution scale).
+ * This catches both oversized custom canvases and large presets at high scale.
+ */
+function validateCanvasPixels(payload: { canvas?: MultiRenderPayload['canvas']; resolution?: MultiRenderPayload['resolution'] }): string | null {
+  const { w, h } = getCanvasSize(payload.canvas as MultiRenderPayload['canvas']);
+  const scale = resolutionScale(payload.resolution as MultiRenderPayload['resolution']);
+  const totalMpix = (w * scale * h * scale) / 1_000_000;
+  if (totalMpix > MAX_CANVAS_MPIX) {
+    return `Output canvas too large (${(totalMpix).toFixed(1)} MP; max ${MAX_CANVAS_MPIX} MP). Use a smaller preset or lower resolution.`;
+  }
+  return null;
+}
+
+function validateStaticPayload(payload: MultiRenderPayload): string | null {
+  if (!payload.items?.length || !payload.format) return 'Missing items or format';
+  if (payload.items.length > MAX_RENDER_ITEMS) return `Too many items (max ${MAX_RENDER_ITEMS})`;
+  return validateCanvasPixels(payload);
+}
+
+function validateAnimationPayload(payload: MultiAnimationRenderPayload): string | null {
+  if (!payload.items?.length || !payload.duration || !payload.fps) {
+    return 'Missing items, duration, or fps';
+  }
+  if (payload.items.length > MAX_RENDER_ITEMS) return `Too many items (max ${MAX_RENDER_ITEMS})`;
+  if (payload.duration > MAX_RENDER_DURATION) return `Duration too long (max ${MAX_RENDER_DURATION}s)`;
+  if (payload.fps > MAX_RENDER_FPS) return `FPS too high (max ${MAX_RENDER_FPS})`;
+  const frames = Math.ceil(payload.duration * payload.fps);
+  if (frames > MAX_RENDER_FRAMES) return `Too many frames (max ${MAX_RENDER_FRAMES})`;
+  return validateCanvasPixels(payload);
+}
+
+// ── Queue / error handler ─────────────────────────────────────────────────────
+
+function handleRenderError(err: unknown, res: Response, context: string) {
+  if (err instanceof QueueFullError) {
+    res.status(503).json({ error: err.message, stats: renderQueueStats() });
+    return;
+  }
+  if (err instanceof RenderTimeoutError) {
+    res.status(504).json({ error: err.message });
+    return;
+  }
+  if (err instanceof PayloadValidationError) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+  // Log the full error server-side; return only a generic message so internal
+  // paths / FFmpeg command lines never reach the client.
+  console.error(`[${context}]`, err);
+  res.status(500).json({ error: `${context} failed` });
+}
 
 // ── GET /state/:token — fetch stored render state ─────────────────────────────
 
@@ -21,22 +104,21 @@ renderRouter.get('/state/:token', (req, res) => {
 
 // ── POST / — static render (PNG/JPG via Puppeteer, MP4 via frame capture) ─────
 
-renderRouter.post('/', async (req, res) => {
+renderRouter.post('/', requireRenderToken, async (req, res) => {
   const payload = req.body as MultiRenderPayload;
 
-  if (!payload.items?.length || !payload.format) {
-    res.status(400).json({ error: 'Missing items or format' });
+  const validationError = validateStaticPayload(payload);
+  if (validationError) {
+    res.status(400).json({ error: validationError });
     return;
   }
 
   try {
-    let outputFilename: string;
+    const outputFilename = await enqueueRender(async (signal) => {
+      if (payload.format === 'mp4') {
+        return renderVideo(payload, signal);
+      }
 
-    if (payload.format === 'mp4') {
-      // MP4 — full multi-layer scene captured frame-by-frame (WYSIWYG) + audio.
-      outputFilename = await renderVideo(payload);
-    } else {
-      // PNG/JPG — single Puppeteer screenshot of the same scene.
       const baseSize = getCanvasSize(payload.canvas);
       const resScale = resolutionScale(payload.resolution);
       const canvasW = baseSize.w * resScale;
@@ -58,31 +140,30 @@ renderRouter.post('/', async (req, res) => {
         canvasH,
       };
 
-      outputFilename = await screenshotRenderState(puppeteerState, payload.format);
-    }
+      return screenshotRenderState(puppeteerState, payload.format, {}, signal);
+    });
 
     res.json({ fileId: outputFilename, downloadUrl: `/api/download/${outputFilename}` });
   } catch (err) {
-    console.error('[render]', err);
-    res.status(500).json({ error: 'Render failed', detail: String(err) });
+    handleRenderError(err, res, 'render');
   }
 });
 
 // ── POST /animation — animation MP4 (Puppeteer frames + FFmpeg) ───────────────
 
-renderRouter.post('/animation', async (req, res) => {
+renderRouter.post('/animation', requireRenderToken, async (req, res) => {
   const payload = req.body as MultiAnimationRenderPayload;
 
-  if (!payload.items?.length || !payload.duration || !payload.fps) {
-    res.status(400).json({ error: 'Missing items, duration, or fps' });
+  const validationError = validateAnimationPayload(payload);
+  if (validationError) {
+    res.status(400).json({ error: validationError });
     return;
   }
 
   try {
-    const outputFilename = await renderAnimation(payload);
+    const outputFilename = await enqueueRender((signal) => renderAnimation(payload, signal));
     res.json({ fileId: outputFilename, downloadUrl: `/api/download/${outputFilename}` });
   } catch (err) {
-    console.error('[render-animation]', err);
-    res.status(500).json({ error: 'Animation render failed', detail: String(err) });
+    handleRenderError(err, res, 'render-animation');
   }
 });
