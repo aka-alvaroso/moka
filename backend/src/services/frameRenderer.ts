@@ -83,10 +83,11 @@ export interface FrameRenderOptions {
   fps: number;
   /** fileId whose audio track is muxed into the output (optional). */
   audioFromFile?: string;
+  signal?: AbortSignal;
 }
 
 export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
-  const { items, background, canvas, canvasW, canvasH, durationSec, fps, audioFromFile } = opts;
+  const { items, background, canvas, canvasW, canvasH, durationSec, fps, audioFromFile, signal } = opts;
   const totalFrames = Math.max(2, Math.round(durationSec * fps));
 
   const frameDir = tmpPath(`frames_${uuidv4()}`);
@@ -106,10 +107,13 @@ export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
     frameDir, ext: 'jpg', quality: 95,
     concurrency: hasVideo ? 1 : undefined,
     onProgress: (d, t) => console.log(`[frameRenderer] captured ${d}/${t} frames`),
+    signal,
   });
 
   console.log(`[frameRenderer] frameDir=${frameDir} frames=${captured} audio=${audioFromFile ?? 'none'}`);
   if (captured === 0) throw new Error('No frames were rendered');
+
+  signal?.throwIfAborted();
 
   const outputFilename = `vid_${uuidv4()}.mp4`;
   const outputPath = tmpPath(outputFilename);
@@ -117,6 +121,10 @@ export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
   await new Promise<void>((resolve, reject) => {
     let cmd = ffmpeg().input(`${frameDir}/frame%06d.jpg`).inputFPS(fps);
     if (audioFromFile) cmd = cmd.input(tmpPath(audioFromFile));
+
+    // Kill the FFmpeg process if the job is cancelled mid-encode.
+    const onAbort = () => { try { cmd.kill('SIGKILL'); } catch { /* already done */ } };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     cmd
       .videoCodec('libx264')
@@ -132,8 +140,15 @@ export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
       ])
       .output(outputPath)
       .on('stderr', (line: string) => console.log('[ffmpeg]', line))
-      .on('end', () => resolve())
-      .on('error', (err: Error) => { console.error('[ffmpeg error]', err.message); reject(err); })
+      .on('end', () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      })
+      .on('error', (err: Error) => {
+        signal?.removeEventListener('abort', onAbort);
+        console.error('[ffmpeg error]', err.message);
+        reject(err);
+      })
       .run();
   });
 

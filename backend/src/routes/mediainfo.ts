@@ -5,7 +5,13 @@ import { tmpPath } from '../services/fileManager';
 export const mediainfoRouter = Router();
 
 mediainfoRouter.get('/:fileId', (req, res) => {
-  const filePath = tmpPath(req.params.fileId);
+  let filePath: string;
+  try {
+    filePath = tmpPath(req.params.fileId);
+  } catch {
+    res.status(400).json({ error: 'Invalid fileId' });
+    return;
+  }
 
   ffmpeg.ffprobe(filePath, (err, data) => {
     if (err) {

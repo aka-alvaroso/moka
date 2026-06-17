@@ -1,5 +1,5 @@
 import puppeteer, { type Browser, type Page, type ElementHandle } from 'puppeteer';
-import { writeFileSync } from 'fs';
+import { writeFile } from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { tmpPath } from './fileManager';
@@ -11,18 +11,23 @@ let _browser: Browser | null = null;
 async function getBrowser(): Promise<Browser> {
   if (_browser && _browser.connected) return _browser;
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
+  // Web-security / cert / insecure-content flags were removed: the render view is
+  // always loaded same-origin from RENDERER_URL, so they only widened the attack
+  // surface while decoding untrusted user media inside Chrome.
+  //
+  // --no-sandbox stays ON by default because the production host runs Chrome as
+  // root in a container, where the sandbox can't initialise. On a host that CAN
+  // run an unprivileged sandbox, set PUPPETEER_NO_SANDBOX=false to restore that
+  // defence — the single most valuable hardening when rendering untrusted media.
+  const noSandbox = process.env.PUPPETEER_NO_SANDBOX !== 'false';
+  const args = ['--disable-dev-shm-usage', '--disable-gpu'];
+  if (noSandbox) args.push('--no-sandbox', '--disable-setuid-sandbox');
+
   _browser = await puppeteer.launch({
     headless: true,
     ...(executablePath ? { executablePath } : {}),
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--ignore-certificate-errors',
-      '--disable-web-security',
-      '--allow-running-insecure-content',
-    ],
+    args,
   });
   return _browser;
 }
@@ -42,12 +47,19 @@ export async function screenshotRenderState(
   state: PuppeteerRenderState,
   format: 'png' | 'jpg',
   opts: { omitBackground?: boolean } = {},
+  signal?: AbortSignal,
 ): Promise<string> {
+  signal?.throwIfAborted();
+
   const token = storeRenderState(state);
   const url = `${RENDERER_URL}/render?token=${token}`;
 
   const browser = await getBrowser();
   const page = await browser.newPage();
+
+  // Close the page immediately if the job is cancelled while we navigate / wait.
+  const onAbort = () => { page.close().catch(() => {}); };
+  signal?.addEventListener('abort', onAbort, { once: true });
 
   try {
     page.on('console', (msg) => console.log(`[puppeteer:${msg.type()}]`, msg.text()));
@@ -58,6 +70,8 @@ export async function screenshotRenderState(
     console.log('[puppeteer] navigating to', url);
     await page.goto(url, { waitUntil: 'load', timeout: 30_000 });
     await page.waitForSelector('#render-ready', { timeout: 30_000 });
+
+    signal?.throwIfAborted();
 
     const element = await page.$('[data-export-canvas]');
     if (!element) throw new Error('Canvas element not found in render view');
@@ -72,10 +86,11 @@ export async function screenshotRenderState(
 
     const ext = format === 'jpg' ? 'jpg' : 'png';
     const outputFilename = `render_${uuidv4()}.${ext}`;
-    writeFileSync(tmpPath(outputFilename), screenshot);
+    await writeFile(tmpPath(outputFilename), screenshot);
     return outputFilename;
   } finally {
-    await page.close();
+    signal?.removeEventListener('abort', onAbort);
+    await page.close().catch(() => {});
   }
 }
 
@@ -90,6 +105,7 @@ export interface CaptureOptions {
   quality?: number;          // JPEG quality (ignored for png)
   concurrency?: number;
   onProgress?: (done: number, total: number) => void;
+  signal?: AbortSignal;
 }
 
 // Capture a whole frame sequence into `frameDir` as frame%06d.<ext>.
@@ -104,6 +120,8 @@ export async function captureFrameSequence(
   times: number[],
   opts: CaptureOptions,
 ): Promise<number> {
+  opts.signal?.throwIfAborted();
+
   const token = storeRenderState(state);
   const url = `${RENDERER_URL}/render?token=${token}`;
   const workers = Math.min(opts.concurrency ?? RENDER_CONCURRENCY, times.length);
@@ -115,6 +133,10 @@ export async function captureFrameSequence(
   // Contiguous slices: worker w handles indices [w, w+workers, w+2·workers, …].
   const captureSlice = async (worker: number) => {
     const page = await browser.newPage();
+
+    const onAbort = () => { page.close().catch(() => {}); };
+    opts.signal?.addEventListener('abort', onAbort, { once: true });
+
     try {
       page.on('pageerror', (err) => console.error('[puppeteer:pageerror]', err instanceof Error ? err.message : String(err)));
       page.on('requestfailed', (req) => console.error('[puppeteer:requestfailed]', req.url(), req.failure()?.errorText));
@@ -127,16 +149,18 @@ export async function captureFrameSequence(
       if (!element) throw new Error('Canvas element not found in render view');
 
       for (let i = worker; i < times.length; i += workers) {
+        opts.signal?.throwIfAborted();
         await renderOneFrame(page, element, times[i]);
         const shot = await element.screenshot(
           opts.ext === 'jpg' ? { type: 'jpeg', quality: opts.quality ?? 95 } : { type: 'png' },
         );
-        writeFileSync(path.join(opts.frameDir, `frame${String(i).padStart(6, '0')}.${opts.ext}`), shot);
+        await writeFile(path.join(opts.frameDir, `frame${String(i).padStart(6, '0')}.${opts.ext}`), shot);
         done += 1;
         if (opts.onProgress && (done % 30 === 0 || done === total)) opts.onProgress(done, total);
       }
     } finally {
-      await page.close();
+      opts.signal?.removeEventListener('abort', onAbort);
+      await page.close().catch(() => {});
     }
   };
 
@@ -150,4 +174,3 @@ async function renderOneFrame(page: Page, _element: ElementHandle<Element>, time
     time,
   );
 }
-
