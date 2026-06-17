@@ -16,6 +16,7 @@ import ffmpegStatic from 'ffmpeg-static';
 import ffprobeStatic from 'ffprobe-static';
 import { tmpPath } from './fileManager';
 import { captureFrameSequence } from './puppeteerRenderer';
+import { PayloadValidationError } from './renderQueue';
 import type {
   PuppeteerRenderState, PuppeteerItem, Background, CanvasConfig,
 } from '@mockup-forge/shared';
@@ -59,8 +60,14 @@ function parseFps(rate?: string): number {
 }
 
 export function probeMedia(fileId: string): Promise<MediaInfo> {
+  const filePath = tmpPath(fileId);
+  if (!fs.existsSync(filePath)) {
+    return Promise.reject(
+      new PayloadValidationError(`Uploaded file not found (it may have expired — please re-upload and try again)`),
+    );
+  }
   return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(tmpPath(fileId), (err, data) => {
+    ffmpeg.ffprobe(filePath, (err, data) => {
       if (err) return reject(err);
       const v = data.streams.find((s) => s.codec_type === 'video');
       const hasAudio = data.streams.some((s) => s.codec_type === 'audio');
