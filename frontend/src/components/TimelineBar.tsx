@@ -17,11 +17,9 @@ const EASING_OPTIONS: { value: EasingType; label: string }[] = [
 interface Props {
   animation: AnimationConfig;
   currentTime: number;
-  playing: boolean;
-  loop: boolean;
-  onLoopChange: (v: boolean) => void;
+  selectedKfId: string | null;
+  onKeyframeSelect: (id: string | null) => void;
   onTimeChange: (t: number) => void;
-  onPlayToggle: () => void;
   onAddKeyframe: (time: number) => void;
   onMoveKeyframe: (id: string, newTime: number) => void;
   onDuplicateKeyframe: (id: string) => void;
@@ -34,19 +32,18 @@ interface Props {
 }
 
 export function TimelineBar({
-  animation, currentTime, playing, loop,
-  onLoopChange, onTimeChange, onPlayToggle,
+  animation, currentTime, selectedKfId, onKeyframeSelect,
+  onTimeChange,
   onAddKeyframe, onMoveKeyframe, onDuplicateKeyframe,
   onRemoveKeyframe, onClearKeyframes, onUpdateEasing, onAnimationChange,
   onScrubStart, onScrubEnd,
 }: Props) {
   const trackRef           = useRef<HTMLDivElement>(null);
   const pointerStartRef    = useRef<{ x: number; y: number } | null>(null);
-  const [selectedKf, setSelectedKf]     = useState<string | null>(null);
   const [scrubbing, setScrubbing]       = useState(false);
   const [draggingKf, setDraggingKf]    = useState<{ id: string } | null>(null);
 
-  const selectedKeyframe = animation.keyframes.find((k) => k.id === selectedKf) ?? null;
+  const selectedKeyframe = animation.keyframes.find((k) => k.id === selectedKfId) ?? null;
 
   // ── Time calculation ──────────────────────────────────────────────────────
 
@@ -69,7 +66,7 @@ export function TimelineBar({
     e.currentTarget.setPointerCapture(e.pointerId);
     pointerStartRef.current = { x: e.clientX, y: e.clientY };
     setScrubbing(true);
-    setSelectedKf(null);
+    onKeyframeSelect(null);
     onScrubStart?.();
     onTimeChange(timeFromClientX(e.clientX));
   };
@@ -113,7 +110,7 @@ export function TimelineBar({
     trackRef.current?.setPointerCapture(e.pointerId);
     pointerStartRef.current = null; // prevent click-to-add on pointerup
     setDraggingKf({ id: kfId });
-    setSelectedKf(kfId);
+    onKeyframeSelect(kfId);
     onScrubStart?.();
   }, [onScrubStart]);
 
@@ -145,20 +142,6 @@ export function TimelineBar({
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)',
       }}>
-
-        {/* Play / Pause */}
-        <button onClick={onPlayToggle} style={iconBtnStyle()}>
-          {playing ? <PauseIcon /> : <PlayIcon />}
-        </button>
-
-        {/* Loop toggle */}
-        <button
-          onClick={() => onLoopChange(!loop)}
-          title={loop ? 'Loop on' : 'Loop off'}
-          style={{ ...iconBtnStyle(), color: loop ? ACCENT : '#555', borderColor: loop ? `${ACCENT}55` : ROW_BORDER }}
-        >
-          <LoopIcon />
-        </button>
 
         {/* Current time */}
         <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#888', minWidth: 36 }}>
@@ -192,7 +175,7 @@ export function TimelineBar({
         {/* Clear all keyframes */}
         {animation.keyframes.length > 0 && (
           <button
-            onClick={() => { onClearKeyframes(); setSelectedKf(null); }}
+            onClick={() => { onClearKeyframes(); onKeyframeSelect(null); }}
             title="Clear all keyframes"
             style={{ ...iconBtnStyle(), color: '#555', fontSize: 10, gap: 4, display: 'flex', alignItems: 'center', padding: '4px 8px', width: 'auto' }}
           >
@@ -226,7 +209,7 @@ export function TimelineBar({
 
             {/* Delete */}
             <button
-              onClick={() => { onRemoveKeyframe(selectedKeyframe.id); setSelectedKf(null); }}
+              onClick={() => { onRemoveKeyframe(selectedKeyframe.id); onKeyframeSelect(null); }}
               style={{ ...iconBtnStyle(), color: '#e94f37' }}
             >
               <TrashIcon />
@@ -293,10 +276,10 @@ export function TimelineBar({
             <KeyframeDiamond
               key={kf.id}
               kf={kf}
-              selected={kf.id === selectedKf}
+              selected={kf.id === selectedKfId}
               isDragging={draggingKf?.id === kf.id}
               pct={pct(kf.time)}
-              onSelect={() => setSelectedKf((prev) => prev === kf.id ? null : kf.id)}
+              onSelect={() => onKeyframeSelect(selectedKfId === kf.id ? null : kf.id)}
               onDragStart={(e) => onKfDragStart(kf.id, e)}
             />
           ))}

@@ -142,6 +142,21 @@ export function useEditor() {
       })),
     }));
 
+  const updateKeyframeProps = (itemId: string, kfId: string, patch: Partial<ContentOptions>) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, itemId, (item) => {
+        const newContent = { ...item.content, ...patch };
+        return {
+          ...item,
+          content: newContent,
+          keyframes: item.keyframes.map((k) =>
+            k.id === kfId ? { ...k, props: contentToAnimatedProps(newContent) } : k
+          ),
+        };
+      }),
+    }));
+
   const updateKeyframeEasing = (itemId: string, kfId: string, easing: EasingType) =>
     setState((s) => ({
       ...s,
@@ -197,7 +212,7 @@ export function useEditor() {
     state,
     addItem, removeItem, selectItem, reorderItem,
     setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
-    addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeEasing, clearKeyframes,
+    addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeProps, updateKeyframeEasing, clearKeyframes,
     setBackground, setCanvas, setAnimationConfig,
   };
 }
