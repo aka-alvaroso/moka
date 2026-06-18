@@ -19,7 +19,7 @@ export default function App() {
     state,
     addItem, removeItem, selectItem,
     setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
-    addKeyframe, removeKeyframe, updateKeyframeEasing, clearKeyframes,
+    addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeEasing, clearKeyframes,
     setBackground, setCanvas, setAnimationConfig,
   } = useEditor();
 
@@ -33,10 +33,14 @@ export default function App() {
   const [allAnimatedProps, setAllAnimatedProps] = useState<Record<string, AnimatedProps>>({});
   const [scrubbing,      setScrubbing]      = useState(false);
   const [settingsOpen,   setSettingsOpen]   = useState(false);
+  const [loop,           setLoop]           = useState(false);
 
   const rafRef      = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const loopRef     = useRef(false);
+
+  useEffect(() => { loopRef.current = loop; }, [loop]);
 
   const selectedItem = state.mediaItems.find((i) => i.id === state.selectedItemId) ?? null;
 
@@ -78,6 +82,11 @@ export default function App() {
       setCurrentTime((prev) => {
         const next = prev + delta;
         if (next >= state.animationDuration) {
+          if (loopRef.current) {
+            lastTickRef.current = now;
+            setAllAnimatedProps(computeAllAnimatedProps(0));
+            return 0;
+          }
           stopPlayback();
           setCurrentTime(state.animationDuration);
           setAllAnimatedProps(computeAllAnimatedProps(state.animationDuration));
@@ -296,10 +305,15 @@ export default function App() {
               animation={animationConfig}
               currentTime={currentTime}
               playing={playing}
+              loop={loop}
+              onLoopChange={setLoop}
               onTimeChange={(t) => { setCurrentTime(t); if (playing) stopPlayback(); }}
               onScrubStart={() => setScrubbing(true)}
               onScrubEnd={() => setScrubbing(false)}
               onPlayToggle={handlePlayToggle}
+              onAddKeyframe={(time) => { if (state.selectedItemId) addKeyframe(state.selectedItemId, time); }}
+              onMoveKeyframe={(kfId, time) => { if (state.selectedItemId) moveKeyframe(state.selectedItemId, kfId, time); }}
+              onDuplicateKeyframe={(kfId) => { if (state.selectedItemId) duplicateKeyframe(state.selectedItemId, kfId, currentTime); }}
               onRemoveKeyframe={(kfId) => { if (state.selectedItemId) removeKeyframe(state.selectedItemId, kfId); }}
               onClearKeyframes={() => { if (state.selectedItemId) clearKeyframes(state.selectedItemId); }}
               onUpdateEasing={(kfId, easing) => { if (state.selectedItemId) updateKeyframeEasing(state.selectedItemId, kfId, easing); }}
