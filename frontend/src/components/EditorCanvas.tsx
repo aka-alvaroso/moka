@@ -49,6 +49,8 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
   const [container, setContainer] = useState({ w: 600, h: 600 });
   const [guides, setGuides] = useState({ x: false, y: false });
   const [emptyHovered, setEmptyHovered] = useState(false);
+  const [ratioAnimating, setRatioAnimating] = useState(false);
+  const prevRatioKeyRef = useRef(`${canvas.ratio}_${canvas.width}_${canvas.height}`);
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -57,6 +59,15 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  useEffect(() => {
+    const key = `${canvas.ratio}_${canvas.width}_${canvas.height}`;
+    if (key === prevRatioKeyRef.current) return;
+    prevRatioKeyRef.current = key;
+    setRatioAnimating(true);
+    const t = setTimeout(() => setRatioAnimating(false), 450);
+    return () => clearTimeout(t);
+  }, [canvas.ratio, canvas.width, canvas.height]);
 
   const ratio = canvasAspectRatio(canvas);
   const PAD = 48;
@@ -161,7 +172,11 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
       <div
         ref={canvasRef}
         className="relative overflow-hidden rounded-xl shrink-0"
-        style={{ width: cw, height: ch, ...backgroundCss(background, 'checkerboard') }}
+        style={{
+          width: cw, height: ch,
+          transition: ratioAnimating ? 'width 0.4s cubic-bezier(0.4,0,0.2,1), height 0.4s cubic-bezier(0.4,0,0.2,1)' : 'none',
+          ...backgroundCss(background, 'checkerboard'),
+        }}
         onMouseDown={() => onItemSelected(null)}
       >
         {/* Drop overlay */}
