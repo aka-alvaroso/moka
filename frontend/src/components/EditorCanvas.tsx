@@ -1,5 +1,4 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { motion } from 'motion/react';
 import { useDropzone } from 'react-dropzone';
 import type { EditorState } from '../hooks/useEditor';
 import type { ContentOptions, MediaItem, AnimatedProps } from '@mockup-forge/shared';
@@ -50,7 +49,6 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
   const [container, setContainer] = useState({ w: 600, h: 600 });
   const [guides, setGuides] = useState({ x: false, y: false });
   const [emptyHovered, setEmptyHovered] = useState(false);
-  const prevRatioKeyRef = useRef(`${canvas.ratio}_${canvas.width}_${canvas.height}`);
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -158,21 +156,12 @@ const ratio = canvasAspectRatio(canvas);
   // ── Render ─────────────────────────────────────────────────────────────────
   const sortedItems = [...mediaItems].sort((a, b) => a.zIndex - b.zIndex);
 
-  const currentRatioKey = `${canvas.ratio}_${canvas.width}_${canvas.height}`;
-  const ratioChanged = currentRatioKey !== prevRatioKeyRef.current;
-  prevRatioKeyRef.current = currentRatioKey;
-
   return (
     <div ref={wrapperRef} className="w-full h-full flex items-center justify-center">
-      <motion.div
+      <div
         ref={canvasRef}
         className="relative overflow-hidden rounded-xl shrink-0"
-        animate={{ width: cw, height: ch }}
-        transition={ratioChanged
-          ? { type: 'spring', stiffness: 260, damping: 28 }
-          : { duration: 0 }
-        }
-        style={{ ...backgroundCss(background, 'checkerboard') }}
+        style={{ width: cw, height: ch, ...backgroundCss(background, 'checkerboard') }}
         onMouseDown={() => onItemSelected(null)}
       >
         {/* Drop overlay */}
@@ -234,7 +223,7 @@ const ratio = canvasAspectRatio(canvas);
             </div>
           </div>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }
