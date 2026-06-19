@@ -285,7 +285,7 @@ export default function App() {
           {/* Footer */}
           <footer style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 16, padding: '8px 24px', flexShrink: 0,
+            gap: 16, padding: '10px 24px', flexShrink: 0,
             borderTop: `1px solid ${colors.divider}`, marginTop: 12,
           }}>
             {/* Settings button */}
@@ -296,12 +296,12 @@ export default function App() {
                   display: 'flex', alignItems: 'center', gap: 6,
                   background: settingsOpen ? ACCENT : 'transparent',
                   border: 'none', cursor: 'pointer',
-                  color: settingsOpen ? '#fff' : colors.fgSubtle,
-                  fontSize: 11, fontWeight: 600, padding: '4px 10px',
+                  color: settingsOpen ? '#fff' : colors.fgDim,
+                  fontSize: 12, fontWeight: 600, padding: '4px 10px',
                   borderRadius: 8, transition: 'background 0.15s, color 0.15s',
                 }}
-                onMouseEnter={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fgDim; }}
-                onMouseLeave={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fgSubtle; }}
+                onMouseEnter={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fg; }}
+                onMouseLeave={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fgDim; }}
               >
                 <GearIcon /> Settings
               </button>
@@ -339,29 +339,35 @@ export default function App() {
               )}
             </div>
 
-            <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
+            <span style={{ color: colors.fgSubtle, fontSize: 12 }}>·</span>
 
-            <span style={{ fontSize: 11, color: colors.fgSubtle, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 12, color: colors.fgDim, whiteSpace: 'nowrap' }}>
               Made with <span style={{ color: ACCENT }}>♥</span> by{' '}
               <a href="https://alvaroso.dev" target="_blank" rel="noopener noreferrer"
-                style={{ color: colors.fgDim, textDecoration: 'none', fontWeight: 600 }}
+                style={{ color: colors.fg, textDecoration: 'none', fontWeight: 600 }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
-                onMouseLeave={(e) => (e.currentTarget.style.color = colors.fgDim)}
+                onMouseLeave={(e) => (e.currentTarget.style.color = colors.fg)}
               >@aka_alvaroso</a>
             </span>
-            <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
+            <span style={{ color: colors.fgSubtle, fontSize: 12 }}>·</span>
             <a href="https://github.com/aka-alvaroso/moka" target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 5, color: colors.fgSubtle, textDecoration: 'none', fontSize: 11 }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = colors.fgDim; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgSubtle; }}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, color: colors.fgDim, textDecoration: 'none', fontSize: 12 }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = colors.fg; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgDim; }}
             >
               <GitHubIcon /> Source code
             </a>
-            <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
-            <span style={{ display: 'flex', gap: 10, fontSize: 11 }}>
-              <FooterBtn onClick={() => setLegalPage('privacy')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Privacy</FooterBtn>
-              <FooterBtn onClick={() => setLegalPage('terms')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Terms</FooterBtn>
+            <span style={{ color: colors.fgSubtle, fontSize: 12 }}>·</span>
+            <span style={{ display: 'flex', gap: 10, fontSize: 12 }}>
+              <FooterBtn onClick={() => setLegalPage('privacy')} color={colors.fgDim} hoverColor={colors.fg}>Privacy</FooterBtn>
+              <FooterBtn onClick={() => setLegalPage('terms')} color={colors.fgDim} hoverColor={colors.fg}>Terms</FooterBtn>
             </span>
+            <span style={{ color: colors.fgSubtle, fontSize: 12 }}>·</span>
+            <span style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+              color: ACCENT, background: ACCENT + '18',
+              padding: '2px 8px', borderRadius: 6,
+            }}>v1.0.0</span>
           </footer>
         </div>
 
@@ -462,7 +468,7 @@ function PanelToggle({ side, open, onClick, colors }: { side: 'left' | 'right'; 
 
 function FooterBtn({ onClick, children, color, hoverColor }: { onClick: () => void; children: React.ReactNode; color: string; hoverColor: string }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', color, padding: 0, fontSize: 11 }}
+    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', color, padding: 0, fontSize: 12, fontWeight: 500 }}
       onMouseEnter={(e) => (e.currentTarget.style.color = hoverColor)}
       onMouseLeave={(e) => (e.currentTarget.style.color = color)}
     >{children}</button>
