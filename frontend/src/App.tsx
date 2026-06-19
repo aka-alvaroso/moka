@@ -35,6 +35,15 @@ export default function App() {
   const [settingsOpen,   setSettingsOpen]   = useState(false);
   const [loop,           setLoop]           = useState(false);
   const [selectedKfId,   setSelectedKfId]   = useState<string | null>(null);
+  const [leftOpen,       setLeftOpen]       = useState(true);
+  const [rightOpen,      setRightOpen]      = useState(true);
+  const [windowWidth,    setWindowWidth]    = useState(window.innerWidth);
+
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const rafRef      = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
@@ -165,6 +174,24 @@ export default function App() {
       style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: colors.bgApp, transition: 'background 0.2s' }}
       className="select-none"
     >
+      {/* Screen too small overlay */}
+      {windowWidth < 1024 && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: colors.bgApp,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 16, padding: 32,
+        }}>
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="moka" style={{ height: 36, marginBottom: 8 }} />
+          <p style={{ color: colors.fg, fontSize: 18, fontWeight: 700, textAlign: 'center', margin: 0 }}>
+            Your screen is too small
+          </p>
+          <p style={{ color: colors.fgSubtle, fontSize: 14, textAlign: 'center', margin: 0, maxWidth: 300 }}>
+            Moka requires a screen at least 1024px wide. Try expanding your browser window or use a larger device.
+          </p>
+        </div>
+      )}
+
       {/* Main row */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
 
@@ -172,16 +199,26 @@ export default function App() {
         <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="moka"
           style={{ position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10, height: 28, pointerEvents: 'none' }} />
 
-        <LeftPanel
-          state={state}
-          onItemAdded={addItem}
-          onItemRemoved={removeItem}
-          onItemSelected={selectItem}
-          onItemReorder={moveItemToIndex}
-          onBackground={setBackground}
-          onCanvas={setCanvas}
-          onExport={() => setExportOpen(true)}
-        />
+        {/* Left panel + collapse wrapper */}
+        <motion.div
+          animate={{ width: leftOpen ? 288 : 0 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+          style={{ overflow: 'hidden', flexShrink: 0 }}
+        >
+          <LeftPanel
+            state={state}
+            onItemAdded={addItem}
+            onItemRemoved={removeItem}
+            onItemSelected={selectItem}
+            onItemReorder={moveItemToIndex}
+            onBackground={setBackground}
+            onCanvas={setCanvas}
+            onExport={() => setExportOpen(true)}
+          />
+        </motion.div>
+
+        {/* Left panel toggle */}
+        <PanelToggle side="left" open={leftOpen} onClick={() => setLeftOpen((v) => !v)} colors={colors} />
 
         {/* Center */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, paddingTop: 18 }}>
@@ -328,11 +365,21 @@ export default function App() {
           </footer>
         </div>
 
-        <RightPanel
-          item={selectedItem}
-          onContent={handleSelectedContentChange}
-          onVideoEndBehavior={(behavior) => { if (state.selectedItemId) setItemVideoEndBehavior(state.selectedItemId, behavior); }}
-        />
+        {/* Right panel toggle */}
+        <PanelToggle side="right" open={rightOpen} onClick={() => setRightOpen((v) => !v)} colors={colors} />
+
+        {/* Right panel + collapse wrapper */}
+        <motion.div
+          animate={{ width: rightOpen ? 288 : 0 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+          style={{ overflow: 'hidden', flexShrink: 0 }}
+        >
+          <RightPanel
+            item={selectedItem}
+            onContent={handleSelectedContentChange}
+            onVideoEndBehavior={(behavior) => { if (state.selectedItemId) setItemVideoEndBehavior(state.selectedItemId, behavior); }}
+          />
+        </motion.div>
       </div>
 
       {/* Timeline bar */}
@@ -372,6 +419,38 @@ export default function App() {
       <ExportDrawer state={state} open={exportOpen} onClose={() => setExportOpen(false)} />
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} />
     </div>
+  );
+}
+
+function PanelToggle({ side, open, onClick, colors }: { side: 'left' | 'right'; open: boolean; onClick: () => void; colors: ReturnType<typeof import('./context/ThemeContext').useTheme>['colors'] }) {
+  const pointsRight = (side === 'left') ? open : !open;
+  return (
+    <button
+      onClick={onClick}
+      title={open ? 'Collapse panel' : 'Expand panel'}
+      style={{
+        flexShrink: 0, alignSelf: 'center',
+        width: 16, height: 48, borderRadius: 6,
+        background: 'transparent', border: 'none',
+        cursor: 'pointer', color: colors.fgSubtle,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'color 0.15s, background 0.15s',
+        padding: 0,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = colors.fgDim; e.currentTarget.style.background = colors.bgRow; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgSubtle; e.currentTarget.style.background = 'transparent'; }}
+    >
+      <motion.svg
+        width="10" height="10"
+        viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="2.5"
+        strokeLinecap="round" strokeLinejoin="round"
+        animate={{ rotate: pointsRight ? 0 : 180 }}
+        transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+      >
+        <path d="m9 18 6-6-6-6" />
+      </motion.svg>
+    </button>
   );
 }
 
