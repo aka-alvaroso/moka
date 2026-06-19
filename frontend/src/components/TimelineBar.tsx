@@ -132,6 +132,7 @@ export function TimelineBar({
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+        position: 'relative',
       }}>
 
         {/* Current time */}
@@ -161,16 +162,22 @@ export function TimelineBar({
           </select>
         </div>
 
+        {/* Shift tip — only while dragging a keyframe */}
+        {draggingKf && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <ShiftIcon />
+            <span style={{ fontSize: 10, color: '#555', letterSpacing: '0.03em' }}>Hold for precision</span>
+          </div>
+        )}
+
         <div style={{ flex: 1 }} />
 
-        {/* Add keyframe at current time */}
-        <button
-          onClick={() => onAddKeyframe(currentTime)}
-          title="Add keyframe at current time"
-          style={{ ...iconBtnStyle(), color: ACCENT, borderColor: `${ACCENT}44` }}
-        >
-          <AddKfIcon />
-        </button>
+        {/* Add keyframe — pinned to absolute center of the bar */}
+        <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+          <div style={{ pointerEvents: 'auto' }}>
+            <AddKeyframeButton onClick={() => onAddKeyframe(currentTime)} />
+          </div>
+        </div>
 
         {/* Clear all keyframes */}
         {animation.keyframes.length > 0 && (
@@ -347,6 +354,33 @@ function KeyframeDiamond({ kf, selected, isDragging, pct, onSelect, onDragStart 
   );
 }
 
+// ── Add keyframe button ───────────────────────────────────────────────────────
+
+function AddKeyframeButton({ onClick }: { onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title="Add keyframe at current time"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '5px 14px', borderRadius: 8,
+        background: hovered ? ACCENT : 'transparent',
+        border: `1px solid ${ACCENT}`,
+        color: hovered ? '#fff' : ACCENT,
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+        cursor: 'pointer', transition: 'background 0.15s, color 0.15s',
+        flexShrink: 0,
+      }}
+    >
+      <AddKfIcon />
+      Add keyframe
+    </button>
+  );
+}
+
 // ── Duration input ────────────────────────────────────────────────────────────
 
 function DurationInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -428,12 +462,20 @@ function DuplicateIcon() {
     </svg>
   );
 }
+function ShiftIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18v-6H5l7-7 7 7h-4v6H9z"/>
+    </svg>
+  );
+}
+
 function AddKfIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="10" y="2" width="4" height="4" rx="1" transform="rotate(45 12 4)" fill="currentColor" stroke="none"/>
-      <line x1="12" y1="11" x2="12" y2="21"/>
-      <line x1="7" y1="16" x2="17" y2="16"/>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 8v8"/>
+      <path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41L13.7 2.71a2.41 2.41 0 0 0-3.41 0z"/>
+      <path d="M8 12h8"/>
     </svg>
   );
 }

@@ -141,19 +141,36 @@ function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected, onReo
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overIndex, setOverIndex] = useState<number | null>(null);
+  const [insertBefore, setInsertBefore] = useState<number | null>(null);
   const sorted = [...items].sort((a, b) => b.zIndex - a.zIndex);
-  const dragStateRef = useRef({ dragId, overIndex, sorted });
-  dragStateRef.current = { dragId, overIndex, sorted };
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const dragStateRef = useRef({ dragId, insertBefore, sorted });
+  dragStateRef.current = { dragId, insertBefore, sorted };
+
+  const getInsertIndex = useCallback((clientY: number): number => {
+    const { sorted } = dragStateRef.current;
+    for (let i = 0; i < sorted.length; i++) {
+      const el = rowRefs.current.get(sorted[i].id);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) return i;
+    }
+    return sorted.length;
+  }, []);
 
   const commitDrop = useCallback(() => {
-    const { dragId, overIndex, sorted } = dragStateRef.current;
-    if (dragId !== null && overIndex !== null) {
+    const { dragId, insertBefore, sorted } = dragStateRef.current;
+    if (dragId !== null && insertBefore !== null) {
       const fromIndex = sorted.findIndex((i) => i.id === dragId);
-      if (fromIndex !== overIndex) onReorder(dragId, sorted.length - 1 - overIndex);
+      // no-op if dropping on same position
+      if (fromIndex !== insertBefore && fromIndex + 1 !== insertBefore) {
+        const corrected = insertBefore - (fromIndex < insertBefore ? 1 : 0);
+        onReorder(dragId, sorted.length - 1 - corrected);
+      }
     }
     setDragId(null);
-    setOverIndex(null);
+    setInsertBefore(null);
   }, [onReorder]);
 
   const handleFile = useCallback(async (file: File) => {
@@ -180,24 +197,42 @@ function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected, onReo
 
       {sorted.length > 0 && (
         <div
+          ref={containerRef}
           style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+          onPointerMove={(e) => {
+            if (!dragStateRef.current.dragId) return;
+            setInsertBefore(getInsertIndex(e.clientY));
+          }}
           onPointerUp={commitDrop}
-          onPointerLeave={() => { if (dragId !== null) commitDrop(); }}
+          onPointerCancel={commitDrop}
         >
           {sorted.map((item, idx) => (
-            <motion.div key={item.id} layout layoutId={item.id} transition={{ duration: 0.18, ease: 'easeInOut' }}>
+            <motion.div
+              key={item.id}
+              layout
+              transition={{ duration: dragId ? 0 : 0.18, ease: 'easeInOut' }}
+              ref={(el) => { if (el) rowRefs.current.set(item.id, el); else rowRefs.current.delete(item.id); }}
+            >
+              <AnimatePresence initial={false}>
+                {dragId && insertBefore === idx && <DropIndicator key="indicator" />}
+              </AnimatePresence>
               <MediaItemRow
                 item={item}
                 selected={item.id === selectedId}
                 isDragging={dragId === item.id}
-                isOver={overIndex === idx && dragId !== item.id}
                 onSelect={() => onSelected(item.id)}
                 onRemove={() => onRemoved(item.id)}
-                onDragStart={() => { setDragId(item.id); setOverIndex(idx); }}
-                onDragEnter={() => { if (dragId) setOverIndex(idx); }}
+                onDragStart={(e) => {
+                  containerRef.current?.setPointerCapture(e.pointerId);
+                  setDragId(item.id);
+                  setInsertBefore(idx);
+                }}
               />
             </motion.div>
           ))}
+          <AnimatePresence initial={false}>
+            {dragId && insertBefore === sorted.length && <DropIndicator key="indicator-end" />}
+          </AnimatePresence>
         </div>
       )}
 
@@ -225,42 +260,61 @@ function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected, onReo
   );
 }
 
-function MediaItemRow({ item, selected, isDragging, isOver, onSelect, onRemove, onDragStart, onDragEnter }: {
-  item: MediaItem; selected: boolean; isDragging: boolean; isOver: boolean;
+function DropIndicator() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scaleX: 0.7 }}
+      animate={{ opacity: 1, scaleX: 1 }}
+      exit={{ opacity: 0, scaleX: 0.7 }}
+      transition={{ duration: 0.12, ease: 'easeOut' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '1px 0', pointerEvents: 'none', originX: 0 }}
+    >
+      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#e94f37', flexShrink: 0 }} />
+      <div style={{ flex: 1, height: 2, borderRadius: 99, background: '#e94f37' }} />
+    </motion.div>
+  );
+}
+
+function MediaItemRow({ item, selected, isDragging, onSelect, onRemove, onDragStart }: {
+  item: MediaItem; selected: boolean; isDragging: boolean;
   onSelect: () => void; onRemove: () => void;
-  onDragStart: () => void; onDragEnter: () => void;
+  onDragStart: (e: React.PointerEvent) => void;
 }) {
   const { colors } = useTheme();
   const [hovered, setHovered] = useState(false);
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
+  const didDrag = useRef(false);
 
   return (
     <div
-      onClick={onSelect}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onPointerEnter={onDragEnter}
+      onPointerDown={(e) => {
+        // Don't initiate drag from the delete button
+        if ((e.target as HTMLElement).closest('button')) return;
+        pointerDownPos.current = { x: e.clientX, y: e.clientY };
+        didDrag.current = false;
+      }}
+      onPointerMove={(e) => {
+        if (!pointerDownPos.current || didDrag.current) return;
+        const dx = Math.abs(e.clientX - pointerDownPos.current.x);
+        const dy = Math.abs(e.clientY - pointerDownPos.current.y);
+        if (dx > 4 || dy > 4) {
+          didDrag.current = true;
+          pointerDownPos.current = null;
+          onDragStart(e);
+        }
+      }}
+      onPointerUp={() => { pointerDownPos.current = null; }}
+      onClick={() => { if (!didDrag.current) onSelect(); didDrag.current = false; }}
       style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
-        borderRadius: 10, cursor: 'pointer',
+        borderRadius: 10, cursor: isDragging ? 'grabbing' : 'grab',
         background: selected ? colors.bgSelected : hovered ? colors.bgRowHover : colors.bgRow,
-        opacity: isDragging ? 0.4 : 1,
-        outline: isOver ? `2px solid ${colors.accent}` : 'none',
-        outlineOffset: -2,
-        transition: 'background 0.1s, opacity 0.1s, outline 0.1s',
+        opacity: isDragging ? 0.35 : 1,
+        transition: 'background 0.1s, opacity 0.15s',
       }}
     >
-      {/* Drag handle */}
-      <div
-        onPointerDown={(e) => { e.stopPropagation(); onDragStart(); }}
-        style={{ cursor: 'grab', color: colors.fgMuted, display: 'flex', padding: '2px 0', flexShrink: 0 }}
-      >
-        <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
-          <circle cx="3" cy="2.5" r="1.2"/><circle cx="7" cy="2.5" r="1.2"/>
-          <circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/>
-          <circle cx="3" cy="11.5" r="1.2"/><circle cx="7" cy="11.5" r="1.2"/>
-        </svg>
-      </div>
-
       <div style={{ width: 36, height: 36, borderRadius: 7, overflow: 'hidden', flexShrink: 0, background: colors.thumbnailBg }}>
         {item.isVideo
           ? <video src={item.previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
