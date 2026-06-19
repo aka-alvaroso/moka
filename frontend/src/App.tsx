@@ -35,6 +35,15 @@ export default function App() {
   const [settingsOpen,   setSettingsOpen]   = useState(false);
   const [loop,           setLoop]           = useState(false);
   const [selectedKfId,   setSelectedKfId]   = useState<string | null>(null);
+  const [leftOpen,       setLeftOpen]       = useState(true);
+  const [rightOpen,      setRightOpen]      = useState(true);
+  const [windowWidth,    setWindowWidth]    = useState(window.innerWidth);
+
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const rafRef      = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
@@ -165,6 +174,24 @@ export default function App() {
       style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: colors.bgApp, transition: 'background 0.2s' }}
       className="select-none"
     >
+      {/* Screen too small overlay */}
+      {windowWidth < 1024 && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: colors.bgApp,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 16, padding: 32,
+        }}>
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="moka" style={{ height: 36, marginBottom: 8 }} />
+          <p style={{ color: colors.fg, fontSize: 18, fontWeight: 700, textAlign: 'center', margin: 0 }}>
+            Your screen is too small
+          </p>
+          <p style={{ color: colors.fgSubtle, fontSize: 14, textAlign: 'center', margin: 0, maxWidth: 300 }}>
+            Moka requires a screen at least 1024px wide. Try expanding your browser window or use a larger device.
+          </p>
+        </div>
+      )}
+
       {/* Main row */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
 
@@ -172,16 +199,26 @@ export default function App() {
         <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="moka"
           style={{ position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10, height: 28, pointerEvents: 'none' }} />
 
-        <LeftPanel
-          state={state}
-          onItemAdded={addItem}
-          onItemRemoved={removeItem}
-          onItemSelected={selectItem}
-          onItemReorder={moveItemToIndex}
-          onBackground={setBackground}
-          onCanvas={setCanvas}
-          onExport={() => setExportOpen(true)}
-        />
+        {/* Left panel + collapse wrapper */}
+        <motion.div
+          animate={{ width: leftOpen ? 288 : 0 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+          style={{ overflow: 'hidden', flexShrink: 0, display: 'flex' }}
+        >
+          <LeftPanel
+            state={state}
+            onItemAdded={addItem}
+            onItemRemoved={removeItem}
+            onItemSelected={selectItem}
+            onItemReorder={moveItemToIndex}
+            onBackground={setBackground}
+            onCanvas={setCanvas}
+            onExport={() => setExportOpen(true)}
+          />
+        </motion.div>
+
+        {/* Left panel toggle */}
+        <PanelToggle side="left" open={leftOpen} onClick={() => setLeftOpen((v) => !v)} colors={colors} />
 
         {/* Center */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, paddingTop: 18 }}>
@@ -248,8 +285,7 @@ export default function App() {
           {/* Footer */}
           <footer style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 16, padding: '8px 24px', flexShrink: 0,
-            borderTop: `1px solid ${colors.divider}`, marginTop: 12,
+            gap: 16, padding: '10px 24px', flexShrink: 0, marginTop: 12,
           }}>
             {/* Settings button */}
             <div ref={settingsRef} style={{ position: 'relative' }}>
@@ -259,12 +295,12 @@ export default function App() {
                   display: 'flex', alignItems: 'center', gap: 6,
                   background: settingsOpen ? ACCENT : 'transparent',
                   border: 'none', cursor: 'pointer',
-                  color: settingsOpen ? '#fff' : colors.fgSubtle,
-                  fontSize: 11, fontWeight: 600, padding: '4px 10px',
+                  color: settingsOpen ? '#fff' : colors.fgDim,
+                  fontSize: 12, fontWeight: 600, padding: '4px 10px',
                   borderRadius: 8, transition: 'background 0.15s, color 0.15s',
                 }}
-                onMouseEnter={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fgDim; }}
-                onMouseLeave={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fgSubtle; }}
+                onMouseEnter={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fg; }}
+                onMouseLeave={(e) => { if (!settingsOpen) e.currentTarget.style.color = colors.fgDim; }}
               >
                 <GearIcon /> Settings
               </button>
@@ -302,37 +338,53 @@ export default function App() {
               )}
             </div>
 
-            <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
+            <span style={{ color: colors.fgSubtle, fontSize: 12 }}>·</span>
 
-            <span style={{ fontSize: 11, color: colors.fgSubtle, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 12, color: colors.fgDim, whiteSpace: 'nowrap' }}>
               Made with <span style={{ color: ACCENT }}>♥</span> by{' '}
               <a href="https://alvaroso.dev" target="_blank" rel="noopener noreferrer"
-                style={{ color: colors.fgDim, textDecoration: 'none', fontWeight: 600 }}
+                style={{ color: colors.fg, textDecoration: 'none', fontWeight: 600 }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
-                onMouseLeave={(e) => (e.currentTarget.style.color = colors.fgDim)}
+                onMouseLeave={(e) => (e.currentTarget.style.color = colors.fg)}
               >@aka_alvaroso</a>
             </span>
-            <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
+            <span style={{ color: colors.fgSubtle, fontSize: 12 }}>·</span>
             <a href="https://github.com/aka-alvaroso/moka" target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 5, color: colors.fgSubtle, textDecoration: 'none', fontSize: 11 }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = colors.fgDim; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgSubtle; }}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, color: colors.fgDim, textDecoration: 'none', fontSize: 12 }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = colors.fg; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgDim; }}
             >
               <GitHubIcon /> Source code
             </a>
-            <span style={{ color: colors.divider, fontSize: 11 }}>·</span>
-            <span style={{ display: 'flex', gap: 10, fontSize: 11 }}>
-              <FooterBtn onClick={() => setLegalPage('privacy')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Privacy</FooterBtn>
-              <FooterBtn onClick={() => setLegalPage('terms')} color={colors.fgSubtle} hoverColor={colors.fgDim}>Terms</FooterBtn>
+            <span style={{ color: colors.fgSubtle, fontSize: 12 }}>·</span>
+            <span style={{ display: 'flex', gap: 10, fontSize: 12 }}>
+              <FooterBtn onClick={() => setLegalPage('privacy')} color={colors.fgDim} hoverColor={colors.fg}>Privacy</FooterBtn>
+              <FooterBtn onClick={() => setLegalPage('terms')} color={colors.fgDim} hoverColor={colors.fg}>Terms</FooterBtn>
             </span>
+            <span style={{ color: colors.fgSubtle, fontSize: 12 }}>·</span>
+            <span style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+              color: ACCENT, background: ACCENT + '18',
+              padding: '2px 8px', borderRadius: 6,
+            }}>v1.0.0</span>
           </footer>
         </div>
 
-        <RightPanel
-          item={selectedItem}
-          onContent={handleSelectedContentChange}
-          onVideoEndBehavior={(behavior) => { if (state.selectedItemId) setItemVideoEndBehavior(state.selectedItemId, behavior); }}
-        />
+        {/* Right panel toggle */}
+        <PanelToggle side="right" open={rightOpen} onClick={() => setRightOpen((v) => !v)} colors={colors} />
+
+        {/* Right panel + collapse wrapper */}
+        <motion.div
+          animate={{ width: rightOpen ? 288 : 0 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+          style={{ overflow: 'hidden', flexShrink: 0, display: 'flex' }}
+        >
+          <RightPanel
+            item={selectedItem}
+            onContent={handleSelectedContentChange}
+            onVideoEndBehavior={(behavior) => { if (state.selectedItemId) setItemVideoEndBehavior(state.selectedItemId, behavior); }}
+          />
+        </motion.div>
       </div>
 
       {/* Timeline bar */}
@@ -375,9 +427,47 @@ export default function App() {
   );
 }
 
+function PanelToggle({ side, open, onClick, colors }: { side: 'left' | 'right'; open: boolean; onClick: () => void; colors: ReturnType<typeof import('./context/ThemeContext').useTheme>['colors'] }) {
+  const pointsRight = side === 'left' ? !open : open;
+  return (
+    <button
+      onClick={onClick}
+      title={open ? 'Collapse panel' : 'Expand panel'}
+      style={{
+        flexShrink: 0,
+        alignSelf: 'flex-start',
+        marginTop: 28,
+        width: 28, height: 28,
+        borderRadius: 8,
+        background: colors.bgPanel,
+        border: `1px solid ${colors.divider}`,
+        cursor: 'pointer',
+        color: colors.fgDim,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'color 0.15s, background 0.15s, border-color 0.15s',
+        padding: 0,
+        zIndex: 5,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = colors.fg; e.currentTarget.style.borderColor = colors.fgSubtle; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgDim; e.currentTarget.style.borderColor = colors.divider; }}
+    >
+      <motion.svg
+        width="13" height="13"
+        viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="2.5"
+        strokeLinecap="round" strokeLinejoin="round"
+        animate={{ rotate: pointsRight ? 0 : 180 }}
+        transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+      >
+        <path d="m9 18 6-6-6-6" />
+      </motion.svg>
+    </button>
+  );
+}
+
 function FooterBtn({ onClick, children, color, hoverColor }: { onClick: () => void; children: React.ReactNode; color: string; hoverColor: string }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', color, padding: 0, fontSize: 11 }}
+    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', color, padding: 0, fontSize: 12, fontWeight: 500 }}
       onMouseEnter={(e) => (e.currentTarget.style.color = hoverColor)}
       onMouseLeave={(e) => (e.currentTarget.style.color = color)}
     >{children}</button>

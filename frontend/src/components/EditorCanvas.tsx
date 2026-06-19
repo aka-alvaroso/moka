@@ -48,6 +48,7 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
 
   const [container, setContainer] = useState({ w: 600, h: 600 });
   const [guides, setGuides] = useState({ x: false, y: false });
+  const [emptyHovered, setEmptyHovered] = useState(false);
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -57,7 +58,7 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
     return () => ro.disconnect();
   }, []);
 
-  const ratio = canvasAspectRatio(canvas);
+const ratio = canvasAspectRatio(canvas);
   const PAD = 48;
   const avW = Math.max(1, container.w - PAD * 2);
   const avH = Math.max(1, container.h - PAD * 2);
@@ -207,9 +208,16 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
 
         {/* Empty state */}
         {mediaItems.length === 0 && !isDragActive && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 cursor-pointer" style={{ zIndex: 1, border: `2px dashed rgba(233,79,55,0.35)`, borderRadius: 'inherit' }} onClick={open}>
-            <img src={`${import.meta.env.BASE_URL}empty_state_${mode}.svg`} style={{ width: 200, height: 'auto', opacity: 0.7 }} draggable={false} />
-            <div style={{ textAlign: 'center' }}>
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4 cursor-pointer"
+            style={{ zIndex: 1, border: `2px dashed rgba(233,79,55,${emptyHovered ? '0.6' : '0.35'})`, borderRadius: 'inherit', transition: 'border-color 0.2s' }}
+            onClick={open}
+            onMouseEnter={() => setEmptyHovered(true)}
+            onMouseLeave={() => setEmptyHovered(false)}
+          >
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', background: 'rgba(0,0,0,0.45)', opacity: emptyHovered ? 1 : 0, transition: 'opacity 0.2s' }} />
+            <img src={`${import.meta.env.BASE_URL}empty_state_${mode}.svg`} style={{ width: 200, height: 'auto', opacity: emptyHovered ? 1 : 0.7, transition: 'opacity 0.2s', position: 'relative', zIndex: 1 }} draggable={false} />
+            <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
               <p style={{ color: '#e94f37', fontSize: 13, fontWeight: 500, margin: 0 }}>Drop image or video</p>
               <p style={{ color: 'rgba(233,79,55,0.6)', fontSize: 11, margin: '4px 0 0' }}>PNG · JPG · WebP · MP4 · MKV</p>
             </div>
