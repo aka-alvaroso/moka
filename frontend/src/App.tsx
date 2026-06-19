@@ -199,9 +199,6 @@ export default function App() {
         <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="moka"
           style={{ position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10, height: 28, pointerEvents: 'none' }} />
 
-        {/* Left panel toggle */}
-        <PanelToggle side="left" open={leftOpen} onClick={() => setLeftOpen((v) => !v)} colors={colors} />
-
         {/* Left panel + collapse wrapper */}
         <motion.div
           animate={{ width: leftOpen ? 288 : 0 }}
@@ -219,6 +216,9 @@ export default function App() {
             onExport={() => setExportOpen(true)}
           />
         </motion.div>
+
+        {/* Left panel toggle */}
+        <PanelToggle side="left" open={leftOpen} onClick={() => setLeftOpen((v) => !v)} colors={colors} />
 
         {/* Center */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, paddingTop: 18 }}>
@@ -370,6 +370,9 @@ export default function App() {
           </footer>
         </div>
 
+        {/* Right panel toggle */}
+        <PanelToggle side="right" open={rightOpen} onClick={() => setRightOpen((v) => !v)} colors={colors} />
+
         {/* Right panel + collapse wrapper */}
         <motion.div
           animate={{ width: rightOpen ? 288 : 0 }}
@@ -382,9 +385,6 @@ export default function App() {
             onVideoEndBehavior={(behavior) => { if (state.selectedItemId) setItemVideoEndBehavior(state.selectedItemId, behavior); }}
           />
         </motion.div>
-
-        {/* Right panel toggle */}
-        <PanelToggle side="right" open={rightOpen} onClick={() => setRightOpen((v) => !v)} colors={colors} />
       </div>
 
       {/* Timeline bar */}
@@ -428,7 +428,7 @@ export default function App() {
 }
 
 function PanelToggle({ side, open, onClick, colors }: { side: 'left' | 'right'; open: boolean; onClick: () => void; colors: ReturnType<typeof import('./context/ThemeContext').useTheme>['colors'] }) {
-  const pointsRight = side === 'left' ? open : !open;
+  const pointsRight = side === 'left' ? !open : open;
   return (
     <button
       onClick={onClick}
