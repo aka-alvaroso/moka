@@ -29,7 +29,7 @@ const DEFAULT: EditorState = {
   canvas: { ratio: '16:9' },
   animationEnabled: false,
   animationDuration: 3,
-  animationFps: 30,
+  animationFps: 60,
 };
 
 export function contentToAnimatedProps(c: ContentOptions): AnimatedProps {

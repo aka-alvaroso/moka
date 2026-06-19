@@ -25,7 +25,7 @@ interface Props {
 }
 
 export function ExportDrawer({ state, open, onClose }: Props) {
-  const [resolution, setResolution] = useState<Resolution>('2x');
+  const [resolution, setResolution] = useState<Resolution>('1x');
   const [format, setFormat] = useState<'png' | 'jpg'>('png');
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
