@@ -92,16 +92,7 @@ export function TimelineBar({
     }
     setScrubbing(false);
     onScrubEnd?.();
-
-    // If pointer barely moved → treat as click → add keyframe
-    if (pointerStartRef.current) {
-      const dx = Math.abs(e.clientX - pointerStartRef.current.x);
-      const dy = Math.abs(e.clientY - pointerStartRef.current.y);
-      if (dx < 4 && dy < 4) {
-        onAddKeyframe(snapTime(timeFromClientX(e.clientX), e.shiftKey));
-      }
-      pointerStartRef.current = null;
-    }
+    pointerStartRef.current = null;
   };
 
   // ── Keyframe drag start (called from KeyframeDiamond) ────────────────────
@@ -171,6 +162,15 @@ export function TimelineBar({
         </div>
 
         <div style={{ flex: 1 }} />
+
+        {/* Add keyframe at current time */}
+        <button
+          onClick={() => onAddKeyframe(currentTime)}
+          title="Add keyframe at current time"
+          style={{ ...iconBtnStyle(), color: ACCENT, borderColor: `${ACCENT}44` }}
+        >
+          <AddKfIcon />
+        </button>
 
         {/* Clear all keyframes */}
         {animation.keyframes.length > 0 && (
@@ -242,7 +242,7 @@ export function TimelineBar({
             position: 'relative', height: TRACK_H,
             background: ROW_BG, borderRadius: 10,
             border: `1px solid ${ROW_BORDER}`,
-            cursor: draggingKf ? 'ew-resize' : 'crosshair',
+            cursor: draggingKf ? 'ew-resize' : 'col-resize',
             overflow: 'visible',
           }}
         >
@@ -305,7 +305,7 @@ export function TimelineBar({
         {/* Hint text */}
         {animation.keyframes.length === 0 && (
           <p style={{ textAlign: 'center', fontSize: 10, color: '#333', margin: '6px 0 0', letterSpacing: '0.04em' }}>
-            Click the track to add a keyframe · Drag diamonds to move them · Hold Shift for free positioning
+            Press ◆ to add a keyframe at the current time · Drag diamonds to move them
           </p>
         )}
       </div>
@@ -425,6 +425,15 @@ function DuplicateIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </svg>
+  );
+}
+function AddKfIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="10" y="2" width="4" height="4" rx="1" transform="rotate(45 12 4)" fill="currentColor" stroke="none"/>
+      <line x1="12" y1="11" x2="12" y2="21"/>
+      <line x1="7" y1="16" x2="17" y2="16"/>
     </svg>
   );
 }

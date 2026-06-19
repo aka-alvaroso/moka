@@ -191,7 +191,7 @@ export default function App() {
               onItemContentChange={handleItemContentChange}
               onItemSelected={selectItem}
               onItemAdded={addItem}
-              allAnimatedProps={isAnimating ? allAnimatedProps : {}}
+              allAnimatedProps={timelineOpen || isAnimating ? allAnimatedProps : {}}
               isAnimating={isAnimating}
             />
           </div>

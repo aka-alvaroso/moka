@@ -4,6 +4,7 @@ import type {
   Background, CanvasConfig, ContentOptions,
   AnimationKeyframe, AnimatedProps, MediaItem, EasingType,
 } from '@mockup-forge/shared';
+import { interpolateProps } from '../lib/interpolate';
 
 export interface EditorState {
   mediaItems: MediaItem[];
@@ -135,7 +136,10 @@ export function useEditor() {
     setState((s) => ({
       ...s,
       mediaItems: updateItem(s.mediaItems, itemId, (item) => {
-        const props = contentToAnimatedProps(item.content);
+        // Use interpolated values when keyframes exist so the new KF matches exactly what's on screen
+        const props = item.keyframes.length > 0
+          ? (interpolateProps(item.keyframes, time) ?? contentToAnimatedProps(item.content))
+          : contentToAnimatedProps(item.content);
         const existing = item.keyframes.find((k) => Math.abs(k.time - time) < 0.01);
         if (existing) {
           return { ...item, keyframes: item.keyframes.map((k) => k.id === existing.id ? { ...k, props } : k).sort((a, b) => a.time - b.time) };
