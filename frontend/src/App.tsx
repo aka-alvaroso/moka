@@ -17,7 +17,7 @@ const ACCENT = '#e94f37';
 export default function App() {
   const {
     state,
-    addItem, removeItem, selectItem,
+    addItem, removeItem, selectItem, moveItemToIndex,
     setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
     addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeProps, updateKeyframeEasing, clearKeyframes,
     setBackground, setCanvas, setAnimationConfig,
@@ -177,6 +177,7 @@ export default function App() {
           onItemAdded={addItem}
           onItemRemoved={removeItem}
           onItemSelected={selectItem}
+          onItemReorder={moveItemToIndex}
           onBackground={setBackground}
           onCanvas={setCanvas}
           onExport={() => setExportOpen(true)}

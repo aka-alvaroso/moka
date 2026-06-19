@@ -88,6 +88,17 @@ export function useEditor() {
     return { ...s, mediaItems: updated };
   });
 
+  const moveItemToIndex = (itemId: string, targetIndex: number) =>
+    setState((s) => {
+      const sorted = [...s.mediaItems].sort((a, b) => a.zIndex - b.zIndex);
+      const fromIndex = sorted.findIndex((i) => i.id === itemId);
+      if (fromIndex === -1 || fromIndex === targetIndex) return s;
+      const reordered = [...sorted];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(targetIndex, 0, moved);
+      return { ...s, mediaItems: reordered.map((item, idx) => ({ ...item, zIndex: idx })) };
+    });
+
   // ── Item content ────────────────────────────────────────────────────────────
 
   const setItemContent = (id: string, patch: Partial<ContentOptions>) =>
@@ -210,7 +221,7 @@ export function useEditor() {
 
   return {
     state,
-    addItem, removeItem, selectItem, reorderItem,
+    addItem, removeItem, selectItem, reorderItem, moveItemToIndex,
     setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
     addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeProps, updateKeyframeEasing, clearKeyframes,
     setBackground, setCanvas, setAnimationConfig,

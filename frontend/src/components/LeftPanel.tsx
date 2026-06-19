@@ -2,10 +2,10 @@ import { useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useDropzone } from 'react-dropzone';
 import type {
-  Background, CanvasConfig, CanvasRatio, MediaItem, MeshConfig,
+  Background, CanvasConfig, CanvasRatio, MediaItem,
 } from '@mockup-forge/shared';
 import type { EditorState } from '../hooks/useEditor';
-import { MeshEditor, meshToCss } from './MeshEditor';
+import { MeshEditor, meshToCss, MESH_PRESETS } from './MeshEditor';
 import { uploadFile, fetchMediaInfo } from '../lib/api';
 import { useTheme } from '../context/ThemeContext';
 
@@ -16,12 +16,13 @@ interface Props {
   onItemAdded: (fileId: string, previewUrl: string, isVideo: boolean, w: number, h: number) => void;
   onItemRemoved: (id: string) => void;
   onItemSelected: (id: string) => void;
+  onItemReorder: (id: string, toIndex: number) => void;
   onBackground: (b: Background) => void;
   onCanvas: (c: CanvasConfig) => void;
   onExport: () => void;
 }
 
-export function LeftPanel({ state, onItemAdded, onItemRemoved, onItemSelected, onBackground, onCanvas, onExport }: Props) {
+export function LeftPanel({ state, onItemAdded, onItemRemoved, onItemSelected, onItemReorder, onBackground, onCanvas, onExport }: Props) {
   const { colors, mode } = useTheme();
   const hasItems = state.mediaItems.length > 0;
 
@@ -67,6 +68,7 @@ export function LeftPanel({ state, onItemAdded, onItemRemoved, onItemSelected, o
           onAdded={onItemAdded}
           onRemoved={onItemRemoved}
           onSelected={onItemSelected}
+          onReorder={onItemReorder}
         />
         <SectionDivider />
         <BackgroundSection background={state.background} onBackground={onBackground} />
@@ -101,6 +103,7 @@ interface MediaProps {
   onAdded: (fileId: string, previewUrl: string, isVideo: boolean, w: number, h: number) => void;
   onRemoved: (id: string) => void;
   onSelected: (id: string) => void;
+  onReorder: (id: string, toIndex: number) => void;
 }
 
 async function processFile(file: File): Promise<{ fileId: string; previewUrl: string; isVideo: boolean; w: number; h: number }> {
@@ -133,10 +136,25 @@ async function processFile(file: File): Promise<{ fileId: string; previewUrl: st
   return { fileId: res.fileId, previewUrl, isVideo: res.isVideo, w, h };
 }
 
-function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected }: MediaProps) {
+function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected, onReorder }: MediaProps) {
   const { colors } = useTheme();
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+  const sorted = [...items].sort((a, b) => b.zIndex - a.zIndex);
+  const dragStateRef = useRef({ dragId, overIndex, sorted });
+  dragStateRef.current = { dragId, overIndex, sorted };
+
+  const commitDrop = useCallback(() => {
+    const { dragId, overIndex, sorted } = dragStateRef.current;
+    if (dragId !== null && overIndex !== null) {
+      const fromIndex = sorted.findIndex((i) => i.id === dragId);
+      if (fromIndex !== overIndex) onReorder(dragId, sorted.length - 1 - overIndex);
+    }
+    setDragId(null);
+    setOverIndex(null);
+  }, [onReorder]);
 
   const handleFile = useCallback(async (file: File) => {
     setLoading(true);
@@ -160,16 +178,25 @@ function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected }: Med
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <SectionLabel>Layers</SectionLabel>
 
-      {items.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {[...items].sort((a, b) => b.zIndex - a.zIndex).map((item) => (
-            <MediaItemRow
-              key={item.id}
-              item={item}
-              selected={item.id === selectedId}
-              onSelect={() => onSelected(item.id)}
-              onRemove={() => onRemoved(item.id)}
-            />
+      {sorted.length > 0 && (
+        <div
+          style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+          onPointerUp={commitDrop}
+          onPointerLeave={() => { if (dragId !== null) commitDrop(); }}
+        >
+          {sorted.map((item, idx) => (
+            <motion.div key={item.id} layout layoutId={item.id} transition={{ duration: 0.18, ease: 'easeInOut' }}>
+              <MediaItemRow
+                item={item}
+                selected={item.id === selectedId}
+                isDragging={dragId === item.id}
+                isOver={overIndex === idx && dragId !== item.id}
+                onSelect={() => onSelected(item.id)}
+                onRemove={() => onRemoved(item.id)}
+                onDragStart={() => { setDragId(item.id); setOverIndex(idx); }}
+                onDragEnter={() => { if (dragId) setOverIndex(idx); }}
+              />
+            </motion.div>
           ))}
         </div>
       )}
@@ -198,8 +225,10 @@ function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected }: Med
   );
 }
 
-function MediaItemRow({ item, selected, onSelect, onRemove }: {
-  item: MediaItem; selected: boolean; onSelect: () => void; onRemove: () => void;
+function MediaItemRow({ item, selected, isDragging, isOver, onSelect, onRemove, onDragStart, onDragEnter }: {
+  item: MediaItem; selected: boolean; isDragging: boolean; isOver: boolean;
+  onSelect: () => void; onRemove: () => void;
+  onDragStart: () => void; onDragEnter: () => void;
 }) {
   const { colors } = useTheme();
   const [hovered, setHovered] = useState(false);
@@ -209,13 +238,29 @@ function MediaItemRow({ item, selected, onSelect, onRemove }: {
       onClick={onSelect}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onPointerEnter={onDragEnter}
       style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
         borderRadius: 10, cursor: 'pointer',
         background: selected ? colors.bgSelected : hovered ? colors.bgRowHover : colors.bgRow,
-        transition: 'background 0.1s',
+        opacity: isDragging ? 0.4 : 1,
+        outline: isOver ? `2px solid ${colors.accent}` : 'none',
+        outlineOffset: -2,
+        transition: 'background 0.1s, opacity 0.1s, outline 0.1s',
       }}
     >
+      {/* Drag handle */}
+      <div
+        onPointerDown={(e) => { e.stopPropagation(); onDragStart(); }}
+        style={{ cursor: 'grab', color: colors.fgMuted, display: 'flex', padding: '2px 0', flexShrink: 0 }}
+      >
+        <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+          <circle cx="3" cy="2.5" r="1.2"/><circle cx="7" cy="2.5" r="1.2"/>
+          <circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/>
+          <circle cx="3" cy="11.5" r="1.2"/><circle cx="7" cy="11.5" r="1.2"/>
+        </svg>
+      </div>
+
       <div style={{ width: 36, height: 36, borderRadius: 7, overflow: 'hidden', flexShrink: 0, background: colors.thumbnailBg }}>
         {item.isVideo
           ? <video src={item.previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
@@ -250,8 +295,16 @@ const BG_TYPES = ['solid', 'gradient', 'mesh', 'image'] as const;
 type BgType = typeof BG_TYPES[number];
 
 const SOLID_PRESETS = [
-  '#0d0d0d', '#0a0f1e', '#1a0a2e', '#1a0a0a', '#0a1a0e',
-  '#0a1a1a', '#1c1c1e', '#2a1a00', '#f5f0eb', '#f8f8f8', '#ffffff',
+  // Oscuros puros
+  '#0d0d0d', '#0a0014', '#000d1a', '#001a0a', '#1a0000',
+  // Saturados medios
+  '#3d0080', '#005099', '#007a33', '#99001a', '#804000',
+  // Vivos
+  '#6600cc', '#0066ff', '#00aa44', '#ff1a1a', '#ff6600',
+  // Brillantes
+  '#9933ff', '#00aaff', '#00dd55', '#ff3366', '#ffaa00',
+  // Claros
+  '#f0e8ff', '#ffffff',
 ];
 const GRAD_PRESETS: Array<{ from: string; to: string; direction: number }> = [
   { from: '#0d0221', to: '#5b21b6', direction: 135 },
@@ -262,14 +315,6 @@ const GRAD_PRESETS: Array<{ from: string; to: string; direction: number }> = [
   { from: '#fc4a1a', to: '#f7b733', direction: 135 },
   { from: '#0d1117', to: '#1d6fde', direction: 145 },
   { from: '#0a0a0a', to: '#e94f37', direction: 160 },
-];
-const MESH_PRESETS: MeshConfig[] = [
-  { base: '#0f0c29', blobs: [{ id: 'a', x: 20, y: 30, color: '#6366f1', size: 90, opacity: 0.85 }, { id: 'b', x: 78, y: 65, color: '#ec4899', size: 75, opacity: 0.75 }] },
-  { base: '#000', blobs: [{ id: 'a', x: 30, y: 20, color: '#e94f37', size: 80, opacity: 0.9 }, { id: 'b', x: 70, y: 70, color: '#f97316', size: 70, opacity: 0.8 }] },
-  { base: '#001a28', blobs: [{ id: 'a', x: 20, y: 60, color: '#06b6d4', size: 90, opacity: 0.8 }, { id: 'b', x: 80, y: 30, color: '#8b5cf6', size: 80, opacity: 0.75 }] },
-  { base: '#0a1628', blobs: [{ id: 'a', x: 25, y: 25, color: '#22d3ee', size: 85, opacity: 0.8 }, { id: 'b', x: 75, y: 75, color: '#6366f1', size: 80, opacity: 0.7 }] },
-  { base: '#0a0a0a', blobs: [{ id: 'a', x: 15, y: 70, color: '#10b981', size: 85, opacity: 0.85 }, { id: 'b', x: 80, y: 25, color: '#3b82f6', size: 70, opacity: 0.75 }] },
-  { base: '#1a0010', blobs: [{ id: 'a', x: 60, y: 20, color: '#f43f5e', size: 90, opacity: 0.85 }, { id: 'b', x: 30, y: 75, color: '#fb923c', size: 75, opacity: 0.8 }] },
 ];
 
 function BackgroundSection({ background, onBackground }: { background: Background; onBackground: (b: Background) => void }) {
@@ -343,7 +388,7 @@ function BackgroundSection({ background, onBackground }: { background: Backgroun
       )}
 
       {type === 'mesh' && (
-        <MeshEditor value={background.mesh ?? MESH_PRESETS[0]} onChange={(mesh) => onBackground({ type: 'mesh', mesh })} />
+        <MeshEditor value={background.mesh ?? MESH_PRESETS[0].config} onChange={(mesh) => onBackground({ type: 'mesh', mesh })} />
       )}
 
       {type === 'image' && (

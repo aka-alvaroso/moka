@@ -12,66 +12,120 @@ export const MESH_PRESETS: { name: string; config: MeshConfig }[] = [
   {
     name: 'Cosmos',
     config: {
-      base: '#0f0c29',
+      base: '#07052e',
       blobs: [
-        { id: '1', x: 20, y: 30, color: '#6366f1', size: 90, opacity: 0.85 },
-        { id: '2', x: 78, y: 65, color: '#a855f7', size: 75, opacity: 0.75 },
-        { id: '3', x: 50, y: 85, color: '#3b82f6', size: 60, opacity: 0.60 },
+        { id: '1', x: 18, y: 28, color: '#7c3aed', size: 100, opacity: 0.95 },
+        { id: '2', x: 80, y: 62, color: '#ec4899', size: 85, opacity: 0.90 },
+        { id: '3', x: 50, y: 82, color: '#3b82f6', size: 65, opacity: 0.70 },
+        { id: '4', x: 62, y: 18, color: '#a855f7', size: 60, opacity: 0.60 },
       ],
     },
   },
   {
-    name: 'Neon',
+    name: 'Fire',
     config: {
-      base: '#0a0a0f',
+      base: '#0f0000',
       blobs: [
-        { id: '1', x: 15, y: 75, color: '#fc466b', size: 85, opacity: 0.90 },
-        { id: '2', x: 85, y: 20, color: '#3f5efb', size: 80, opacity: 0.85 },
-        { id: '3', x: 50, y: 50, color: '#7c3aed', size: 55, opacity: 0.50 },
-      ],
-    },
-  },
-  {
-    name: 'Emerald',
-    config: {
-      base: '#0d1f1a',
-      blobs: [
-        { id: '1', x: 25, y: 65, color: '#10b981', size: 90, opacity: 0.85 },
-        { id: '2', x: 75, y: 30, color: '#34d399', size: 70, opacity: 0.75 },
-        { id: '3', x: 55, y: 80, color: '#059669', size: 55, opacity: 0.55 },
-      ],
-    },
-  },
-  {
-    name: 'Sunset',
-    config: {
-      base: '#1a0a00',
-      blobs: [
-        { id: '1', x: 20, y: 20, color: '#f59e0b', size: 85, opacity: 0.85 },
-        { id: '2', x: 75, y: 70, color: '#ef4444', size: 80, opacity: 0.80 },
-        { id: '3', x: 50, y: 50, color: '#f97316', size: 60, opacity: 0.60 },
+        { id: '1', x: 25, y: 70, color: '#ff2200', size: 100, opacity: 0.95 },
+        { id: '2', x: 72, y: 30, color: '#ff8c00', size: 85, opacity: 0.90 },
+        { id: '3', x: 50, y: 50, color: '#ffd700', size: 60, opacity: 0.65 },
+        { id: '4', x: 15, y: 20, color: '#ef4444', size: 55, opacity: 0.70 },
       ],
     },
   },
   {
     name: 'Ocean',
     config: {
-      base: '#020b18',
+      base: '#000d1a',
       blobs: [
-        { id: '1', x: 30, y: 25, color: '#0ea5e9', size: 85, opacity: 0.80 },
-        { id: '2', x: 70, y: 70, color: '#06b6d4', size: 75, opacity: 0.75 },
-        { id: '3', x: 15, y: 75, color: '#3b82f6', size: 65, opacity: 0.55 },
+        { id: '1', x: 22, y: 65, color: '#0ea5e9', size: 100, opacity: 0.95 },
+        { id: '2', x: 78, y: 28, color: '#6366f1', size: 85, opacity: 0.85 },
+        { id: '3', x: 55, y: 80, color: '#00e5ff', size: 65, opacity: 0.70 },
+        { id: '4', x: 70, y: 65, color: '#3b82f6', size: 55, opacity: 0.55 },
       ],
     },
   },
   {
-    name: 'Mint',
+    name: 'Aurora',
     config: {
-      base: '#021a14',
+      base: '#001a0a',
       blobs: [
-        { id: '1', x: 35, y: 60, color: '#00b09b', size: 90, opacity: 0.85 },
-        { id: '2', x: 65, y: 35, color: '#96c93d', size: 70, opacity: 0.80 },
-        { id: '3', x: 80, y: 80, color: '#22d3ee', size: 55, opacity: 0.50 },
+        { id: '1', x: 20, y: 35, color: '#00ff88', size: 95, opacity: 0.90 },
+        { id: '2', x: 75, y: 70, color: '#00e5ff', size: 85, opacity: 0.85 },
+        { id: '3', x: 48, y: 55, color: '#7c3aed', size: 70, opacity: 0.65 },
+        { id: '4', x: 82, y: 20, color: '#10b981', size: 55, opacity: 0.60 },
+      ],
+    },
+  },
+  {
+    name: 'Sunset',
+    config: {
+      base: '#180a00',
+      blobs: [
+        { id: '1', x: 15, y: 30, color: '#ff6b00', size: 100, opacity: 0.95 },
+        { id: '2', x: 70, y: 65, color: '#ff0080', size: 90, opacity: 0.90 },
+        { id: '3', x: 85, y: 20, color: '#ffd700', size: 65, opacity: 0.70 },
+        { id: '4', x: 45, y: 80, color: '#ef4444', size: 60, opacity: 0.65 },
+      ],
+    },
+  },
+  {
+    name: 'Neon',
+    config: {
+      base: '#040010',
+      blobs: [
+        { id: '1', x: 18, y: 72, color: '#ff00ff', size: 95, opacity: 0.90 },
+        { id: '2', x: 82, y: 22, color: '#00ffff', size: 90, opacity: 0.88 },
+        { id: '3', x: 50, y: 45, color: '#ff2d78', size: 65, opacity: 0.65 },
+        { id: '4', x: 68, y: 75, color: '#7700ff', size: 55, opacity: 0.60 },
+      ],
+    },
+  },
+  {
+    name: 'Emerald',
+    config: {
+      base: '#001a10',
+      blobs: [
+        { id: '1', x: 20, y: 60, color: '#00ff88', size: 95, opacity: 0.90 },
+        { id: '2', x: 75, y: 28, color: '#00d4aa', size: 80, opacity: 0.85 },
+        { id: '3', x: 50, y: 78, color: '#84cc16', size: 65, opacity: 0.65 },
+        { id: '4', x: 85, y: 70, color: '#10b981', size: 50, opacity: 0.55 },
+      ],
+    },
+  },
+  {
+    name: 'Gold',
+    config: {
+      base: '#100800',
+      blobs: [
+        { id: '1', x: 25, y: 45, color: '#ffd700', size: 100, opacity: 0.90 },
+        { id: '2', x: 75, y: 30, color: '#ff8c00', size: 80, opacity: 0.85 },
+        { id: '3', x: 55, y: 75, color: '#ffb700', size: 70, opacity: 0.70 },
+        { id: '4', x: 15, y: 75, color: '#ef4444', size: 55, opacity: 0.55 },
+      ],
+    },
+  },
+  {
+    name: 'Rose',
+    config: {
+      base: '#1a001a',
+      blobs: [
+        { id: '1', x: 22, y: 40, color: '#ff0066', size: 95, opacity: 0.90 },
+        { id: '2', x: 78, y: 65, color: '#ff80ab', size: 85, opacity: 0.80 },
+        { id: '3', x: 55, y: 22, color: '#ff4081', size: 70, opacity: 0.70 },
+        { id: '4', x: 40, y: 78, color: '#e040fb', size: 60, opacity: 0.60 },
+      ],
+    },
+  },
+  {
+    name: 'Ice',
+    config: {
+      base: '#f0faff',
+      blobs: [
+        { id: '1', x: 25, y: 35, color: '#60a5fa', size: 95, opacity: 0.60 },
+        { id: '2', x: 72, y: 68, color: '#a78bfa', size: 85, opacity: 0.55 },
+        { id: '3', x: 55, y: 20, color: '#38bdf8', size: 65, opacity: 0.45 },
+        { id: '4', x: 82, y: 30, color: '#e0f2fe', size: 55, opacity: 0.50 },
       ],
     },
   },
