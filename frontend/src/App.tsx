@@ -199,11 +199,14 @@ export default function App() {
         <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="moka"
           style={{ position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 10, height: 28, pointerEvents: 'none' }} />
 
+        {/* Left panel toggle */}
+        <PanelToggle side="left" open={leftOpen} onClick={() => setLeftOpen((v) => !v)} colors={colors} />
+
         {/* Left panel + collapse wrapper */}
         <motion.div
           animate={{ width: leftOpen ? 288 : 0 }}
           transition={{ type: 'spring', stiffness: 340, damping: 30 }}
-          style={{ overflow: 'hidden', flexShrink: 0 }}
+          style={{ overflow: 'hidden', flexShrink: 0, display: 'flex' }}
         >
           <LeftPanel
             state={state}
@@ -216,9 +219,6 @@ export default function App() {
             onExport={() => setExportOpen(true)}
           />
         </motion.div>
-
-        {/* Left panel toggle */}
-        <PanelToggle side="left" open={leftOpen} onClick={() => setLeftOpen((v) => !v)} colors={colors} />
 
         {/* Center */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, paddingTop: 18 }}>
@@ -365,14 +365,11 @@ export default function App() {
           </footer>
         </div>
 
-        {/* Right panel toggle */}
-        <PanelToggle side="right" open={rightOpen} onClick={() => setRightOpen((v) => !v)} colors={colors} />
-
         {/* Right panel + collapse wrapper */}
         <motion.div
           animate={{ width: rightOpen ? 288 : 0 }}
           transition={{ type: 'spring', stiffness: 340, damping: 30 }}
-          style={{ overflow: 'hidden', flexShrink: 0 }}
+          style={{ overflow: 'hidden', flexShrink: 0, display: 'flex' }}
         >
           <RightPanel
             item={selectedItem}
@@ -380,6 +377,9 @@ export default function App() {
             onVideoEndBehavior={(behavior) => { if (state.selectedItemId) setItemVideoEndBehavior(state.selectedItemId, behavior); }}
           />
         </motion.div>
+
+        {/* Right panel toggle */}
+        <PanelToggle side="right" open={rightOpen} onClick={() => setRightOpen((v) => !v)} colors={colors} />
       </div>
 
       {/* Timeline bar */}
@@ -423,25 +423,31 @@ export default function App() {
 }
 
 function PanelToggle({ side, open, onClick, colors }: { side: 'left' | 'right'; open: boolean; onClick: () => void; colors: ReturnType<typeof import('./context/ThemeContext').useTheme>['colors'] }) {
-  const pointsRight = (side === 'left') ? open : !open;
+  const pointsRight = side === 'left' ? open : !open;
   return (
     <button
       onClick={onClick}
       title={open ? 'Collapse panel' : 'Expand panel'}
       style={{
-        flexShrink: 0, alignSelf: 'center',
-        width: 16, height: 48, borderRadius: 6,
-        background: 'transparent', border: 'none',
-        cursor: 'pointer', color: colors.fgSubtle,
+        flexShrink: 0,
+        alignSelf: 'flex-start',
+        marginTop: 28,
+        width: 28, height: 28,
+        borderRadius: 8,
+        background: colors.bgPanel,
+        border: `1px solid ${colors.divider}`,
+        cursor: 'pointer',
+        color: colors.fgDim,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'color 0.15s, background 0.15s',
+        transition: 'color 0.15s, background 0.15s, border-color 0.15s',
         padding: 0,
+        zIndex: 5,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = colors.fgDim; e.currentTarget.style.background = colors.bgRow; }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgSubtle; e.currentTarget.style.background = 'transparent'; }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = colors.fg; e.currentTarget.style.borderColor = colors.fgSubtle; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = colors.fgDim; e.currentTarget.style.borderColor = colors.divider; }}
     >
       <motion.svg
-        width="10" height="10"
+        width="13" height="13"
         viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
