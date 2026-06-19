@@ -25,7 +25,7 @@ const DEFAULT: EditorState = {
   mediaItems: [],
   selectedItemId: null,
   background: { type: 'solid', color: '#0f0f0f' },
-  canvas: { ratio: '1:1' },
+  canvas: { ratio: '16:9' },
   animationEnabled: false,
   animationDuration: 3,
   animationFps: 30,
@@ -88,6 +88,17 @@ export function useEditor() {
     return { ...s, mediaItems: updated };
   });
 
+  const moveItemToIndex = (itemId: string, targetIndex: number) =>
+    setState((s) => {
+      const sorted = [...s.mediaItems].sort((a, b) => a.zIndex - b.zIndex);
+      const fromIndex = sorted.findIndex((i) => i.id === itemId);
+      if (fromIndex === -1 || fromIndex === targetIndex) return s;
+      const reordered = [...sorted];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(targetIndex, 0, moved);
+      return { ...s, mediaItems: reordered.map((item, idx) => ({ ...item, zIndex: idx })) };
+    });
+
   // ── Item content ────────────────────────────────────────────────────────────
 
   const setItemContent = (id: string, patch: Partial<ContentOptions>) =>
@@ -142,12 +153,53 @@ export function useEditor() {
       })),
     }));
 
+  const updateKeyframeProps = (itemId: string, kfId: string, patch: Partial<ContentOptions>) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, itemId, (item) => {
+        const newContent = { ...item.content, ...patch };
+        return {
+          ...item,
+          content: newContent,
+          keyframes: item.keyframes.map((k) =>
+            k.id === kfId ? { ...k, props: contentToAnimatedProps(newContent) } : k
+          ),
+        };
+      }),
+    }));
+
   const updateKeyframeEasing = (itemId: string, kfId: string, easing: EasingType) =>
     setState((s) => ({
       ...s,
       mediaItems: updateItem(s.mediaItems, itemId, (item) => ({
         ...item, keyframes: item.keyframes.map((k) => k.id === kfId ? { ...k, easing } : k),
       })),
+    }));
+
+  const moveKeyframe = (itemId: string, kfId: string, newTime: number) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, itemId, (item) => ({
+        ...item,
+        keyframes: item.keyframes
+          .map((k) => k.id === kfId ? { ...k, time: Math.max(0, Math.min(s.animationDuration, newTime)) } : k)
+          .sort((a, b) => a.time - b.time),
+      })),
+    }));
+
+  const duplicateKeyframe = (itemId: string, kfId: string, targetTime: number) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, itemId, (item) => {
+        const source = item.keyframes.find((k) => k.id === kfId);
+        if (!source) return item;
+        const existing = item.keyframes.find((k) => Math.abs(k.time - targetTime) < 0.01);
+        if (existing) {
+          return { ...item, keyframes: item.keyframes.map((k) => k.id === existing.id ? { ...k, props: source.props } : k) };
+        }
+        const newKf: AnimationKeyframe = { ...source, id: uuidv4(), time: targetTime };
+        return { ...item, keyframes: [...item.keyframes, newKf].sort((a, b) => a.time - b.time) };
+      }),
     }));
 
   const clearKeyframes = (itemId: string) =>
@@ -169,9 +221,9 @@ export function useEditor() {
 
   return {
     state,
-    addItem, removeItem, selectItem, reorderItem,
+    addItem, removeItem, selectItem, reorderItem, moveItemToIndex,
     setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
-    addKeyframe, removeKeyframe, updateKeyframeEasing, clearKeyframes,
+    addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeProps, updateKeyframeEasing, clearKeyframes,
     setBackground, setCanvas, setAnimationConfig,
   };
 }

@@ -17,9 +17,9 @@ const ACCENT = '#e94f37';
 export default function App() {
   const {
     state,
-    addItem, removeItem, selectItem,
+    addItem, removeItem, selectItem, moveItemToIndex,
     setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
-    addKeyframe, removeKeyframe, updateKeyframeEasing, clearKeyframes,
+    addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeProps, updateKeyframeEasing, clearKeyframes,
     setBackground, setCanvas, setAnimationConfig,
   } = useEditor();
 
@@ -33,10 +33,16 @@ export default function App() {
   const [allAnimatedProps, setAllAnimatedProps] = useState<Record<string, AnimatedProps>>({});
   const [scrubbing,      setScrubbing]      = useState(false);
   const [settingsOpen,   setSettingsOpen]   = useState(false);
+  const [loop,           setLoop]           = useState(false);
+  const [selectedKfId,   setSelectedKfId]   = useState<string | null>(null);
 
   const rafRef      = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const loopRef     = useRef(false);
+
+  useEffect(() => { loopRef.current = loop; }, [loop]);
+  useEffect(() => { setSelectedKfId(null); }, [state.selectedItemId]);
 
   const selectedItem = state.mediaItems.find((i) => i.id === state.selectedItemId) ?? null;
 
@@ -78,6 +84,11 @@ export default function App() {
       setCurrentTime((prev) => {
         const next = prev + delta;
         if (next >= state.animationDuration) {
+          if (loopRef.current) {
+            lastTickRef.current = now;
+            setAllAnimatedProps(computeAllAnimatedProps(0));
+            return 0;
+          }
           stopPlayback();
           setCurrentTime(state.animationDuration);
           setAllAnimatedProps(computeAllAnimatedProps(state.animationDuration));
@@ -98,12 +109,9 @@ export default function App() {
 
   useEffect(() => {
     if (!timelineOpen) {
-      setAllAnimatedProps({});
-      stopPlayback();
-      setCurrentTime(0);
       setScrubbing(false);
     }
-  }, [timelineOpen, stopPlayback]);
+  }, [timelineOpen]);
 
   // Close settings on outside click
   useEffect(() => {
@@ -128,9 +136,20 @@ export default function App() {
   };
 
   const handleItemContentChange = useCallback((id: string, patch: Partial<import('@mockup-forge/shared').ContentOptions>) => {
-    if (timelineOpen) setItemContentAndKeyframe(id, patch, currentTime);
-    else setItemContent(id, patch);
-  }, [timelineOpen, currentTime, setItemContent, setItemContentAndKeyframe]);
+    if (timelineOpen) {
+      if (selectedKfId) {
+        // Editar el keyframe seleccionado directamente, sin importar el playhead
+        updateKeyframeProps(id, selectedKfId, patch);
+      } else {
+        const item = state.mediaItems.find((i) => i.id === id);
+        const hasKeyframes = (item?.keyframes.length ?? 0) > 0;
+        if (hasKeyframes) setItemContentAndKeyframe(id, patch, currentTime);
+        else setItemContent(id, patch);
+      }
+    } else {
+      setItemContent(id, patch);
+    }
+  }, [timelineOpen, selectedKfId, currentTime, state.mediaItems, setItemContent, setItemContentAndKeyframe, updateKeyframeProps]);
 
   const handleSelectedContentChange = useCallback((patch: Partial<import('@mockup-forge/shared').ContentOptions>) => {
     if (!state.selectedItemId) return;
@@ -138,6 +157,7 @@ export default function App() {
   }, [state.selectedItemId, handleItemContentChange]);
 
   const isAnimating = playing || scrubbing;
+  const hasAnimatedItems = state.mediaItems.some((i) => i.keyframes.length > 0);
 
   return (
     <div
@@ -157,6 +177,7 @@ export default function App() {
           onItemAdded={addItem}
           onItemRemoved={removeItem}
           onItemSelected={selectItem}
+          onItemReorder={moveItemToIndex}
           onBackground={setBackground}
           onCanvas={setCanvas}
           onExport={() => setExportOpen(true)}
@@ -175,8 +196,40 @@ export default function App() {
             />
           </div>
 
-          {/* Animate button */}
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 12px 0', flexShrink: 0 }}>
+          {/* Animate button + play control */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '12px 12px 0', flexShrink: 0 }}>
+            {/* Loop toggle — subtle */}
+            <button
+              onClick={() => setLoop((v) => !v)}
+              title={loop ? 'Loop: on' : 'Loop: off'}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                background: 'transparent',
+                border: `1px solid ${loop ? ACCENT + '66' : 'rgba(255,255,255,0.08)'}`,
+                color: loop ? ACCENT : '#555',
+                cursor: 'pointer', transition: 'color 0.15s, border-color 0.15s',
+              }}
+            >
+              <LoopIcon />
+            </button>
+
+            {/* Play / Pause */}
+            <button
+              onClick={handlePlayToggle}
+              title={playing ? 'Pause' : 'Play'}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 42, height: 42, borderRadius: 12, flexShrink: 0,
+                background: playing ? '#c73e2b' : ACCENT,
+                border: 'none', color: '#fff', cursor: 'pointer',
+                transition: 'background 0.15s',
+              }}
+            >
+              {playing ? <PauseIconLg /> : <PlayIconLg />}
+            </button>
+
+            {/* Animate / Close */}
             <button
               onClick={() => setTimelineOpen((v) => !v)}
               style={{
@@ -295,15 +348,22 @@ export default function App() {
             <TimelineBar
               animation={animationConfig}
               currentTime={currentTime}
-              playing={playing}
+              selectedKfId={selectedKfId}
+              onKeyframeSelect={setSelectedKfId}
               onTimeChange={(t) => { setCurrentTime(t); if (playing) stopPlayback(); }}
               onScrubStart={() => setScrubbing(true)}
               onScrubEnd={() => setScrubbing(false)}
-              onPlayToggle={handlePlayToggle}
+              onAddKeyframe={(time) => { if (state.selectedItemId) addKeyframe(state.selectedItemId, time); }}
+              onMoveKeyframe={(kfId, time) => { if (state.selectedItemId) moveKeyframe(state.selectedItemId, kfId, time); }}
+              onDuplicateKeyframe={(kfId) => { if (state.selectedItemId) duplicateKeyframe(state.selectedItemId, kfId, currentTime); }}
               onRemoveKeyframe={(kfId) => { if (state.selectedItemId) removeKeyframe(state.selectedItemId, kfId); }}
               onClearKeyframes={() => { if (state.selectedItemId) clearKeyframes(state.selectedItemId); }}
               onUpdateEasing={(kfId, easing) => { if (state.selectedItemId) updateKeyframeEasing(state.selectedItemId, kfId, easing); }}
-              onAnimationChange={(patch) => setAnimationConfig({ animationEnabled: patch.enabled, animationDuration: patch.duration, animationFps: patch.fps })}
+              onAnimationChange={(patch) => setAnimationConfig({
+                ...(patch.enabled   !== undefined && { animationEnabled:   patch.enabled   }),
+                ...(patch.duration  !== undefined && { animationDuration:  patch.duration  }),
+                ...(patch.fps       !== undefined && { animationFps:       patch.fps       }),
+              })}
             />
           </motion.div>
         )}
@@ -349,6 +409,30 @@ function PlayIcon({ open }: { open: boolean }) {
   ) : (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
       <polygon points="5,3 19,12 5,21"/>
+    </svg>
+  );
+}
+
+function LoopIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+    </svg>
+  );
+}
+
+function PlayIconLg() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <polygon points="5,3 19,12 5,21"/>
+    </svg>
+  );
+}
+
+function PauseIconLg() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="4" y="4" width="5" height="16" rx="1.5"/><rect x="15" y="4" width="5" height="16" rx="1.5"/>
     </svg>
   );
 }

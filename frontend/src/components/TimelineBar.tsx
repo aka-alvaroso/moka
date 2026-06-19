@@ -17,9 +17,12 @@ const EASING_OPTIONS: { value: EasingType; label: string }[] = [
 interface Props {
   animation: AnimationConfig;
   currentTime: number;
-  playing: boolean;
+  selectedKfId: string | null;
+  onKeyframeSelect: (id: string | null) => void;
   onTimeChange: (t: number) => void;
-  onPlayToggle: () => void;
+  onAddKeyframe: (time: number) => void;
+  onMoveKeyframe: (id: string, newTime: number) => void;
+  onDuplicateKeyframe: (id: string) => void;
   onRemoveKeyframe: (id: string) => void;
   onClearKeyframes: () => void;
   onUpdateEasing: (id: string, easing: EasingType) => void;
@@ -29,40 +32,87 @@ interface Props {
 }
 
 export function TimelineBar({
-  animation, currentTime, playing,
-  onTimeChange, onPlayToggle,
+  animation, currentTime, selectedKfId, onKeyframeSelect,
+  onTimeChange,
+  onAddKeyframe, onMoveKeyframe, onDuplicateKeyframe,
   onRemoveKeyframe, onClearKeyframes, onUpdateEasing, onAnimationChange,
   onScrubStart, onScrubEnd,
 }: Props) {
-  const trackRef      = useRef<HTMLDivElement>(null);
-  const [selectedKf, setSelectedKf] = useState<string | null>(null);
-  const [dragging, setDragging]     = useState(false);
+  const trackRef           = useRef<HTMLDivElement>(null);
+  const pointerStartRef    = useRef<{ x: number; y: number } | null>(null);
+  const [scrubbing, setScrubbing]       = useState(false);
+  const [draggingKf, setDraggingKf]    = useState<{ id: string } | null>(null);
 
-  const selectedKeyframe = animation.keyframes.find((k) => k.id === selectedKf) ?? null;
+  const selectedKeyframe = animation.keyframes.find((k) => k.id === selectedKfId) ?? null;
 
-  // ── Track click / drag ────────────────────────────────────────────────────
+  // ── Time calculation ──────────────────────────────────────────────────────
 
-  const timeFromEvent = useCallback((clientX: number): number => {
+  const timeFromClientX = useCallback((clientX: number): number => {
     const rect = trackRef.current?.getBoundingClientRect();
     if (!rect) return 0;
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     return pct * animation.duration;
   }, [animation.duration]);
 
+  const snapTime = (t: number, shiftKey: boolean): number => {
+    const clamped = Math.max(0, Math.min(animation.duration, t));
+    if (shiftKey) return Math.round(clamped * 100) / 100;
+    return Math.round(clamped * 10) / 10;
+  };
+
+  // ── Track pointer events ──────────────────────────────────────────────────
+
   const onTrackPointerDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    setDragging(true);
-    setSelectedKf(null);
+    pointerStartRef.current = { x: e.clientX, y: e.clientY };
+    setScrubbing(true);
+    onKeyframeSelect(null);
     onScrubStart?.();
-    onTimeChange(timeFromEvent(e.clientX));
+    onTimeChange(timeFromClientX(e.clientX));
   };
 
   const onTrackPointerMove = (e: React.PointerEvent) => {
-    if (!dragging) return;
-    onTimeChange(timeFromEvent(e.clientX));
+    // Dragging a keyframe diamond
+    if (draggingKf) {
+      const t = snapTime(timeFromClientX(e.clientX), e.shiftKey);
+      onMoveKeyframe(draggingKf.id, t);
+      onTimeChange(t);
+      return;
+    }
+    // Scrubbing the playhead
+    if (!scrubbing) return;
+    onTimeChange(timeFromClientX(e.clientX));
   };
 
-  const onTrackPointerUp = () => { setDragging(false); onScrubEnd?.(); };
+  const onTrackPointerUp = (e: React.PointerEvent) => {
+    if (draggingKf) {
+      setDraggingKf(null);
+      onScrubEnd?.();
+      return;
+    }
+    setScrubbing(false);
+    onScrubEnd?.();
+
+    // If pointer barely moved → treat as click → add keyframe
+    if (pointerStartRef.current) {
+      const dx = Math.abs(e.clientX - pointerStartRef.current.x);
+      const dy = Math.abs(e.clientY - pointerStartRef.current.y);
+      if (dx < 4 && dy < 4) {
+        onAddKeyframe(snapTime(timeFromClientX(e.clientX), e.shiftKey));
+      }
+      pointerStartRef.current = null;
+    }
+  };
+
+  // ── Keyframe drag start (called from KeyframeDiamond) ────────────────────
+
+  const onKfDragStart = useCallback((kfId: string, e: React.PointerEvent) => {
+    trackRef.current?.setPointerCapture(e.pointerId);
+    pointerStartRef.current = null; // prevent click-to-add on pointerup
+    setDraggingKf({ id: kfId });
+    onKeyframeSelect(kfId);
+    onScrubStart?.();
+  }, [onScrubStart]);
 
   // ── Format helpers ────────────────────────────────────────────────────────
 
@@ -92,11 +142,6 @@ export function TimelineBar({
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)',
       }}>
-
-        {/* Play / Pause */}
-        <button onClick={onPlayToggle} style={iconBtnStyle()}>
-          {playing ? <PauseIcon /> : <PlayIcon />}
-        </button>
 
         {/* Current time */}
         <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#888', minWidth: 36 }}>
@@ -130,7 +175,7 @@ export function TimelineBar({
         {/* Clear all keyframes */}
         {animation.keyframes.length > 0 && (
           <button
-            onClick={() => { onClearKeyframes(); setSelectedKf(null); }}
+            onClick={() => { onClearKeyframes(); onKeyframeSelect(null); }}
             title="Clear all keyframes"
             style={{ ...iconBtnStyle(), color: '#555', fontSize: 10, gap: 4, display: 'flex', alignItems: 'center', padding: '4px 8px', width: 'auto' }}
           >
@@ -153,8 +198,18 @@ export function TimelineBar({
               ))}
             </select>
 
+            {/* Duplicate */}
             <button
-              onClick={() => { onRemoveKeyframe(selectedKeyframe.id); setSelectedKf(null); }}
+              onClick={() => onDuplicateKeyframe(selectedKeyframe.id)}
+              title="Duplicate keyframe to playhead position"
+              style={iconBtnStyle()}
+            >
+              <DuplicateIcon />
+            </button>
+
+            {/* Delete */}
+            <button
+              onClick={() => { onRemoveKeyframe(selectedKeyframe.id); onKeyframeSelect(null); }}
               style={{ ...iconBtnStyle(), color: '#e94f37' }}
             >
               <TrashIcon />
@@ -187,7 +242,8 @@ export function TimelineBar({
             position: 'relative', height: TRACK_H,
             background: ROW_BG, borderRadius: 10,
             border: `1px solid ${ROW_BORDER}`,
-            cursor: 'crosshair', overflow: 'visible',
+            cursor: draggingKf ? 'ew-resize' : 'crosshair',
+            overflow: 'visible',
           }}
         >
           {/* Segment fills between keyframes */}
@@ -220,9 +276,11 @@ export function TimelineBar({
             <KeyframeDiamond
               key={kf.id}
               kf={kf}
-              selected={kf.id === selectedKf}
+              selected={kf.id === selectedKfId}
+              isDragging={draggingKf?.id === kf.id}
               pct={pct(kf.time)}
-              onSelect={() => setSelectedKf((prev) => prev === kf.id ? null : kf.id)}
+              onSelect={() => onKeyframeSelect(selectedKfId === kf.id ? null : kf.id)}
+              onDragStart={(e) => onKfDragStart(kf.id, e)}
             />
           ))}
 
@@ -236,7 +294,6 @@ export function TimelineBar({
             transform: 'translateX(-50%)',
             boxShadow: '0 0 6px rgba(255,255,255,0.4)',
           }}>
-            {/* Playhead head */}
             <div style={{
               position: 'absolute', top: -1, left: '50%', transform: 'translateX(-50%)',
               width: 8, height: 8, borderRadius: 2,
@@ -244,6 +301,13 @@ export function TimelineBar({
             }} />
           </div>
         </div>
+
+        {/* Hint text */}
+        {animation.keyframes.length === 0 && (
+          <p style={{ textAlign: 'center', fontSize: 10, color: '#333', margin: '6px 0 0', letterSpacing: '0.04em' }}>
+            Click the track to add a keyframe · Drag diamonds to move them · Hold Shift for free positioning
+          </p>
+        )}
       </div>
     </div>
   );
@@ -251,24 +315,33 @@ export function TimelineBar({
 
 // ── Keyframe diamond marker ───────────────────────────────────────────────────
 
-function KeyframeDiamond({ kf, selected, pct, onSelect }: {
-  kf: AnimationKeyframe; selected: boolean; pct: string;
+function KeyframeDiamond({ kf, selected, isDragging, pct, onSelect, onDragStart }: {
+  kf: AnimationKeyframe;
+  selected: boolean;
+  isDragging: boolean;
+  pct: string;
   onSelect: () => void;
+  onDragStart: (e: React.PointerEvent) => void;
 }) {
   return (
     <div
-      onPointerDown={(e) => { e.stopPropagation(); onSelect(); }}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        onSelect();
+        onDragStart(e);
+      }}
       style={{
         position: 'absolute', left: pct, top: '50%',
         transform: 'translate(-50%, -50%) rotate(45deg)',
-        width: selected ? 14 : 11, height: selected ? 14 : 11,
-        background: selected ? '#fff' : ACCENT,
-        border: selected ? `2px solid ${ACCENT}` : '2px solid rgba(255,255,255,0.3)',
+        width: isDragging ? 16 : selected ? 14 : 11,
+        height: isDragging ? 16 : selected ? 14 : 11,
+        background: isDragging ? '#fff' : selected ? '#fff' : ACCENT,
+        border: selected || isDragging ? `2px solid ${ACCENT}` : '2px solid rgba(255,255,255,0.3)',
         borderRadius: 3,
-        cursor: 'pointer',
-        transition: 'width 0.1s, height 0.1s, background 0.1s',
-        zIndex: 2,
-        boxShadow: selected ? `0 0 10px ${ACCENT}88` : 'none',
+        cursor: 'ew-resize',
+        transition: isDragging ? 'none' : 'width 0.1s, height 0.1s, background 0.1s',
+        zIndex: isDragging ? 4 : 2,
+        boxShadow: isDragging ? `0 0 14px ${ACCENT}cc` : selected ? `0 0 10px ${ACCENT}88` : 'none',
       }}
     />
   );
@@ -334,13 +407,24 @@ function PlayIcon() {
 function PauseIcon() {
   return <svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor"><rect x="0" y="0" width="3.5" height="12" rx="1"/><rect x="6.5" y="0" width="3.5" height="12" rx="1"/></svg>;
 }
-function DiamondIcon() {
-  return <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1" transform="rotate(45 4 4)"/></svg>;
-}
 function TrashIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+    </svg>
+  );
+}
+function LoopIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+    </svg>
+  );
+}
+function DuplicateIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
     </svg>
   );
 }
