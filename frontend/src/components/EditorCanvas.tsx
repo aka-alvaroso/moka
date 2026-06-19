@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { motion } from 'motion/react';
 import { useDropzone } from 'react-dropzone';
 import type { EditorState } from '../hooks/useEditor';
 import type { ContentOptions, MediaItem, AnimatedProps } from '@mockup-forge/shared';
@@ -49,7 +50,6 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
   const [container, setContainer] = useState({ w: 600, h: 600 });
   const [guides, setGuides] = useState({ x: false, y: false });
   const [emptyHovered, setEmptyHovered] = useState(false);
-  const [ratioAnimating, setRatioAnimating] = useState(false);
   const prevRatioKeyRef = useRef(`${canvas.ratio}_${canvas.width}_${canvas.height}`);
 
   useEffect(() => {
@@ -60,16 +60,7 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => {
-    const key = `${canvas.ratio}_${canvas.width}_${canvas.height}`;
-    if (key === prevRatioKeyRef.current) return;
-    prevRatioKeyRef.current = key;
-    setRatioAnimating(true);
-    const t = setTimeout(() => setRatioAnimating(false), 450);
-    return () => clearTimeout(t);
-  }, [canvas.ratio, canvas.width, canvas.height]);
-
-  const ratio = canvasAspectRatio(canvas);
+const ratio = canvasAspectRatio(canvas);
   const PAD = 48;
   const avW = Math.max(1, container.w - PAD * 2);
   const avH = Math.max(1, container.h - PAD * 2);
@@ -167,16 +158,21 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
   // ── Render ─────────────────────────────────────────────────────────────────
   const sortedItems = [...mediaItems].sort((a, b) => a.zIndex - b.zIndex);
 
+  const currentRatioKey = `${canvas.ratio}_${canvas.width}_${canvas.height}`;
+  const ratioChanged = currentRatioKey !== prevRatioKeyRef.current;
+  prevRatioKeyRef.current = currentRatioKey;
+
   return (
     <div ref={wrapperRef} className="w-full h-full flex items-center justify-center">
-      <div
+      <motion.div
         ref={canvasRef}
         className="relative overflow-hidden rounded-xl shrink-0"
-        style={{
-          width: cw, height: ch,
-          transition: ratioAnimating ? 'width 0.4s cubic-bezier(0.4,0,0.2,1), height 0.4s cubic-bezier(0.4,0,0.2,1)' : 'none',
-          ...backgroundCss(background, 'checkerboard'),
-        }}
+        animate={{ width: cw, height: ch }}
+        transition={ratioChanged
+          ? { type: 'spring', stiffness: 260, damping: 28 }
+          : { duration: 0 }
+        }
+        style={{ ...backgroundCss(background, 'checkerboard') }}
         onMouseDown={() => onItemSelected(null)}
       >
         {/* Drop overlay */}
@@ -238,7 +234,7 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
             </div>
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }
