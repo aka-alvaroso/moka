@@ -215,9 +215,10 @@ const ratio = canvasAspectRatio(canvas);
             onMouseEnter={() => setEmptyHovered(true)}
             onMouseLeave={() => setEmptyHovered(false)}
           >
-            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', background: 'rgba(0,0,0,0.45)', opacity: emptyHovered ? 1 : 0, transition: 'opacity 0.2s' }} />
-            <img src={`${import.meta.env.BASE_URL}empty_state2.svg`} style={{ width: 200, height: 'auto', opacity: emptyHovered ? 1 : 0.7, transition: 'opacity 0.2s', position: 'relative', zIndex: 1 }} draggable={false} />
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', background: 'rgba(0,0,0,0.65)', opacity: emptyHovered ? 1 : 0, transition: 'opacity 0.2s' }} />
+            <img src={`${import.meta.env.BASE_URL}empty_state.svg`} style={{ width: 200, height: 'auto', opacity: emptyHovered ? 1 : 0.7, transition: 'opacity 0.2s', position: 'relative', zIndex: 1 }} draggable={false} />
             <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: 500, margin: '0 0 8px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>No files uploaded</p>
               <p style={{ color: '#e94f37', fontSize: 13, fontWeight: 500, margin: 0 }}>Drop image or video</p>
               <p style={{ color: 'rgba(233,79,55,0.6)', fontSize: 11, margin: '4px 0 0' }}>PNG · JPG · WebP · MP4 · MKV</p>
             </div>
