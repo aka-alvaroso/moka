@@ -17,17 +17,35 @@ const PORT = process.env.PORT || 3001;
 app.set('trust proxy', 1);
 
 // ── Security headers ──────────────────────────────────────────────────────────
-// nosniff, X-Frame-Options: DENY (anti-clickjacking), Referrer-Policy, etc.
-//  • CSP is disabled: the SPA relies on React inline-style attributes, which a
-//    default content-security-policy would block. (The download route already
-//    pins its own Content-Type + nosniff + attachment disposition.)
-//  • CORP is set to cross-origin so the render view / app can still load uploaded
-//    media from the download endpoint across the dev frontend/backend ports.
+// nosniff, Referrer-Policy, etc. via helmet defaults, plus:
+//  • CSP: allows same-origin scripts/styles/fonts + blob: for local media
+//    previews (URL.createObjectURL) + unsafe-inline for React inline styles.
+//    No external origins are permitted.
+//  • frame-ancestors 'none' (CSP) + X-Frame-Options: DENY — double-locks
+//    clickjacking since CSP takes precedence in modern browsers.
+//  • CORP cross-origin: lets the render view (served same-origin in production,
+//    different port in dev) load uploaded media from the download endpoint.
+//  • COEP is disabled: enabling it requires CORP on every served resource;
+//    leaving it off avoids breaking existing behaviour while CSP is the primary
+//    defence layer.
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:     ["'self'"],
+      scriptSrc:      ["'self'"],
+      styleSrc:       ["'self'", "'unsafe-inline'"],
+      imgSrc:         ["'self'", "blob:", "data:"],
+      mediaSrc:       ["'self'", "blob:"],
+      fontSrc:        ["'self'"],
+      connectSrc:     ["'self'"],
+      objectSrc:      ["'none'"],
+      baseUri:        ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginEmbedderPolicy: false,
-  frameguard: { action: 'deny' }, // editor is never iframed → block it outright
+  frameguard: { action: 'deny' },
 }));
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
@@ -84,6 +102,20 @@ app.get('*', (_req, res) => {
 });
 
 ensureTmpDir();
+
+// ── Security startup checks ───────────────────────────────────────────────────
+if (!process.env.RENDER_TOKEN) {
+  const msg = '[security] RENDER_TOKEN is not set — render endpoints are open to the network.';
+  if (process.env.NODE_ENV === 'production') {
+    console.error(msg + ' Set RENDER_TOKEN in your environment before deploying.');
+  } else {
+    console.warn(msg + ' Acceptable for local dev.');
+  }
+}
+
+if (process.env.PUPPETEER_NO_SANDBOX === 'true') {
+  console.warn('[security] PUPPETEER_NO_SANDBOX=true — Chrome sandbox is disabled. Only do this when running as root in a container.');
+}
 
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);

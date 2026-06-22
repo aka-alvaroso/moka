@@ -43,6 +43,14 @@ const MAX_RENDER_ITEMS  = Number(process.env.MAX_RENDER_ITEMS   ?? 20);
  * This catches both oversized custom canvases and large presets at high scale.
  */
 function validateCanvasPixels(payload: { canvas?: MultiRenderPayload['canvas']; resolution?: MultiRenderPayload['resolution'] }): string | null {
+  if (payload.canvas?.ratio === 'custom') {
+    const w = payload.canvas.width;
+    const h = payload.canvas.height;
+    if (!Number.isInteger(w) || (w as number) < 100 || (w as number) > 8192 ||
+        !Number.isInteger(h) || (h as number) < 100 || (h as number) > 8192) {
+      return 'Custom canvas width and height must be integers between 100 and 8192 px';
+    }
+  }
   const { w, h } = getCanvasSize(payload.canvas as MultiRenderPayload['canvas']);
   const scale = resolutionScale(payload.resolution as MultiRenderPayload['resolution']);
   const totalMpix = (w * scale * h * scale) / 1_000_000;
@@ -53,12 +61,16 @@ function validateCanvasPixels(payload: { canvas?: MultiRenderPayload['canvas']; 
 }
 
 function validateStaticPayload(payload: MultiRenderPayload): string | null {
+  const canvasErr = validateCanvasPixels(payload);
+  if (canvasErr) return canvasErr;
   if (!payload.items?.length || !payload.format) return 'Missing items or format';
   if (payload.items.length > MAX_RENDER_ITEMS) return `Too many items (max ${MAX_RENDER_ITEMS})`;
-  return validateCanvasPixels(payload);
+  return null;
 }
 
 function validateAnimationPayload(payload: MultiAnimationRenderPayload): string | null {
+  const canvasErr = validateCanvasPixels(payload);
+  if (canvasErr) return canvasErr;
   if (!payload.items?.length || !payload.duration || !payload.fps) {
     return 'Missing items, duration, or fps';
   }
@@ -67,7 +79,7 @@ function validateAnimationPayload(payload: MultiAnimationRenderPayload): string 
   if (payload.fps > MAX_RENDER_FPS) return `FPS too high (max ${MAX_RENDER_FPS})`;
   const frames = Math.ceil(payload.duration * payload.fps);
   if (frames > MAX_RENDER_FRAMES) return `Too many frames (max ${MAX_RENDER_FRAMES})`;
-  return validateCanvasPixels(payload);
+  return null;
 }
 
 // ── Queue / error handler ─────────────────────────────────────────────────────
