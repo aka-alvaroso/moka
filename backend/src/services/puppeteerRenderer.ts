@@ -16,11 +16,11 @@ async function getBrowser(): Promise<Browser> {
   // always loaded same-origin from RENDERER_URL, so they only widened the attack
   // surface while decoding untrusted user media inside Chrome.
   //
-  // --no-sandbox stays ON by default because the production host runs Chrome as
-  // root in a container, where the sandbox can't initialise. On a host that CAN
-  // run an unprivileged sandbox, set PUPPETEER_NO_SANDBOX=false to restore that
-  // defence — the single most valuable hardening when rendering untrusted media.
-  const noSandbox = process.env.PUPPETEER_NO_SANDBOX !== 'false';
+  // Sandbox is ON by default (the safest posture when rendering untrusted media).
+  // Set PUPPETEER_NO_SANDBOX=true ONLY when Chrome genuinely cannot initialise its
+  // sandbox — typically when the process runs as root inside a container. Never
+  // disable the sandbox on a host where unprivileged user namespaces are available.
+  const noSandbox = process.env.PUPPETEER_NO_SANDBOX === 'true';
   const args = ['--disable-dev-shm-usage', '--disable-gpu'];
   if (noSandbox) args.push('--no-sandbox', '--disable-setuid-sandbox');
 
