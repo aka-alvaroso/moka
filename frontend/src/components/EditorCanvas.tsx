@@ -36,9 +36,15 @@ interface Props {
   onItemAdded: (fileId: string, previewUrl: string, isVideo: boolean, w: number, h: number) => void;
   allAnimatedProps: Record<string, AnimatedProps>;
   isAnimating: boolean;
+  /** Animation playhead time (seconds). Drives video seeking when the timeline is open. */
+  currentTime: number;
+  /** Whether the animation is playing (vs. paused/scrubbing). */
+  playing: boolean;
+  /** When open, videos are slaved to the playhead; when closed they free-play (autoplay/loop). */
+  timelineOpen: boolean;
 }
 
-export function EditorCanvas({ state, onItemContentChange, onItemSelected, onItemAdded, allAnimatedProps, isAnimating }: Props) {
+export function EditorCanvas({ state, onItemContentChange, onItemSelected, onItemAdded, allAnimatedProps, isAnimating, currentTime, playing, timelineOpen }: Props) {
   const { background, canvas, mediaItems, selectedItemId } = state;
   const { mode } = useTheme();
 
@@ -196,6 +202,9 @@ const ratio = canvasAspectRatio(canvas);
             selected={item.id === selectedItemId}
             animatedProps={allAnimatedProps[item.id] ?? null}
             isAnimating={isAnimating}
+            currentTime={currentTime}
+            playing={playing}
+            videoControlled={timelineOpen}
             canvasRef={canvasRef}
             dragRef={dragRef}
             onSelect={(e) => { e.stopPropagation(); onItemSelected(item.id); }}
@@ -255,13 +264,16 @@ interface LayerProps {
   selected: boolean;
   animatedProps: AnimatedProps | null;
   isAnimating: boolean;
+  currentTime: number;
+  playing: boolean;
+  videoControlled: boolean;
   canvasRef: React.RefObject<HTMLDivElement | null>;
   dragRef: React.MutableRefObject<DragState | null>;
   onSelect: (e: React.MouseEvent) => void;
   onContentChange: (patch: Partial<ContentOptions>) => void;
 }
 
-function ItemLayer({ item, cw, ch, selected, animatedProps, isAnimating, canvasRef, dragRef, onSelect, onContentChange }: LayerProps) {
+function ItemLayer({ item, cw, ch, selected, animatedProps, isAnimating, currentTime, playing, videoControlled, canvasRef, dragRef, onSelect, onContentChange }: LayerProps) {
   // Shared geometry/CSS — identical to the export path (RenderView).
   const live = applyAnimatedProps(item.content, animatedProps);
   const { dispW, dispH, cx, cy, half, rFrac, borderRadiusCss } = computeItemLayout(live, item.srcW, item.srcH, cw, ch);
@@ -283,10 +295,36 @@ function ItemLayer({ item, cw, ch, selected, animatedProps, isAnimating, canvasR
     };
   };
 
+  // ── Video playback control ──────────────────────────────────────────────────
+  // Timeline closed → free autoplay/loop preview (unchanged behaviour).
+  // Timeline open   → slave the video to the animation playhead: while playing it
+  //   runs natively (smooth), while paused/scrubbing it seeks to `currentTime` so
+  //   the frame on screen is exactly what the playhead points at — letting you
+  //   line up keyframes to specific moments of the footage.
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !item.isVideo) return;
+    if (!videoControlled) { v.play().catch(() => {}); return; }
+    if (playing) {
+      if (v.paused) v.play().catch(() => {});
+      return;
+    }
+    if (!v.paused) v.pause();
+    const dur = Number.isFinite(v.duration) ? v.duration : Infinity;
+    const target = Math.min(currentTime, Math.max(0, dur - 1e-3));
+    if (Math.abs(v.currentTime - target) > 1 / 120) {
+      try { v.currentTime = target; } catch { /* not seekable yet */ }
+    }
+  }, [item.isVideo, videoControlled, playing, currentTime]);
+
   const videoEl = item.isVideo ? (
     <video
+      ref={videoRef}
       src={item.previewUrl}
-      autoPlay loop={item.videoEndBehavior === 'loop'}
+      autoPlay={!videoControlled}
+      loop={!videoControlled && item.videoEndBehavior === 'loop'}
       muted playsInline
       style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
       draggable={false}

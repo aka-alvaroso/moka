@@ -233,6 +233,9 @@ export default function App() {
               onItemAdded={addItem}
               allAnimatedProps={timelineOpen || isAnimating ? allAnimatedProps : {}}
               isAnimating={isAnimating}
+              currentTime={currentTime}
+              playing={playing}
+              timelineOpen={timelineOpen}
             />
           </div>
 
