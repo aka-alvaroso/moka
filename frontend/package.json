@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@mockup-forge/shared": "workspace:*",
+    "lucide-react": "^1.22.0",
     "motion": "^12.40.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

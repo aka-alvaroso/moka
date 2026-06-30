@@ -1,5 +1,6 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, type ReactNode } from 'react';
 import { motion } from 'motion/react';
+import { LogIn, LogOut } from 'lucide-react';
 import type { AnimatedProps, AnimationKeyframe, EasingType } from '@mockup-forge/shared';
 import { PRESETS, PRESET_MOTION, generateKeyframes } from '../lib/animationPresets';
 
@@ -24,9 +25,9 @@ const EASING_OPTIONS: { value: EasingType; label: string }[] = [
   { value: 'linear',      label: 'Linear' },
 ];
 
-const CATEGORIES: { id: PresetCategory; label: string }[] = [
-  { id: 'in',  label: 'Entrance' },
-  { id: 'out', label: 'Exit'     },
+const CATEGORIES: { id: PresetCategory; label: string; icon: ReactNode }[] = [
+  { id: 'in',  label: 'Entrance', icon: <LogIn  size={12} /> },
+  { id: 'out', label: 'Exit',     icon: <LogOut size={12} /> },
 ];
 
 const CARD_W   = 88;
@@ -83,17 +84,18 @@ export function AnimationPresetsPanel({ baseProps, animationDuration, onApply }:
                     key={cat.id}
                     onClick={() => handleCategoryChange(cat.id)}
                     style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
                       padding: '5px 12px', borderRadius: 8, border: 'none',
                       background: active ? ROW_BG : 'transparent',
                       color: active ? '#ccc' : '#444',
                       fontSize: 11, fontWeight: 700, cursor: 'pointer',
                       letterSpacing: '0.04em', textAlign: 'left', whiteSpace: 'nowrap',
                       transition: 'color 0.15s, background 0.15s',
-                      borderLeft: `2px solid ${active ? ACCENT : 'transparent'}`,
                     }}
                     onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = '#777'; }}
                     onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = '#444'; }}
                   >
+                    {cat.icon}
                     {cat.label}
                   </button>
                 );
