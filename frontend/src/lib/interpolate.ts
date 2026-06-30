@@ -2,20 +2,29 @@ import type { AnimatedProps, AnimationKeyframe, EasingType } from '@mockup-forge
 
 // ── Easing functions ──────────────────────────────────────────────────────────
 
-// Spring: underdamped oscillation that settles at 1
-// stiffness=180, damping=12 — feels snappy but bouncy
-function springEasing(t: number): number {
-  const stiffness = 180;
-  const damping   = 12;
-  const mass      = 1;
-  const w0        = Math.sqrt(stiffness / mass);
-  const zeta      = damping / (2 * Math.sqrt(stiffness * mass));
-  if (zeta < 1) {
-    const wd = w0 * Math.sqrt(1 - zeta * zeta);
-    return 1 - Math.exp(-zeta * w0 * t) * (Math.cos(wd * t) + (zeta * w0 / wd) * Math.sin(wd * t));
-  }
-  return 1 - Math.exp(-w0 * t) * (1 + w0 * t);
+// Spring: cubic-bezier approximation (0.34, 1.56, 0.64, 1)
+// Overshoots ~10% then settles to exactly 1.0 at t=1.
+// Unlike physics spring, this always completes within the keyframe span.
+function cubicBezier(p1x: number, p1y: number, p2x: number, p2y: number) {
+  const cx = 3 * p1x, bx = 3 * (p2x - p1x) - cx, ax = 1 - cx - bx;
+  const cy = 3 * p1y, by = 3 * (p2y - p1y) - cy, ay = 1 - cy - by;
+  const sampleX  = (t: number) => ((ax * t + bx) * t + cx) * t;
+  const sampleY  = (t: number) => ((ay * t + by) * t + cy) * t;
+  const sampleDX = (t: number) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x: number): number => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let u = x;
+    for (let i = 0; i < 8; i++) {
+      const d = sampleDX(u);
+      if (Math.abs(d) < 1e-10) break;
+      u -= (sampleX(u) - x) / d;
+    }
+    return sampleY(u);
+  };
 }
+
+const springEasing = cubicBezier(0.34, 1.56, 0.64, 1);
 
 export function applyEasing(t: number, easing: EasingType): number {
   switch (easing) {
@@ -23,7 +32,7 @@ export function applyEasing(t: number, easing: EasingType): number {
     case 'ease-in':     return t * t * t;
     case 'ease-out':    return 1 - Math.pow(1 - t, 3);
     case 'ease-in-out': return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    case 'spring':      return springEasing(t * 6); // scale t so 1s feels like full spring; overshoot is intentional
+    case 'spring':      return springEasing(t);
   }
 }
 

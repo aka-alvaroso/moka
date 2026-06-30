@@ -106,9 +106,9 @@ interface MediaProps {
   onReorder: (id: string, toIndex: number) => void;
 }
 
-async function processFile(file: File): Promise<{ fileId: string; previewUrl: string; isVideo: boolean; w: number; h: number }> {
+async function processFile(file: File, onProgress?: (pct: number) => void): Promise<{ fileId: string; previewUrl: string; isVideo: boolean; w: number; h: number }> {
   const isMkv = file.name.toLowerCase().endsWith('.mkv');
-  const res = await uploadFile(file);
+  const res = await uploadFile(file, onProgress);
   let w = 0, h = 0;
 
   if (isMkv) {
@@ -139,7 +139,7 @@ async function processFile(file: File): Promise<{ fileId: string; previewUrl: st
 function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected, onReorder }: MediaProps) {
   const { colors } = useTheme();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [insertBefore, setInsertBefore] = useState<number | null>(null);
   const sorted = [...items].sort((a, b) => b.zIndex - a.zIndex);
@@ -174,14 +174,14 @@ function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected, onReo
   }, [onReorder]);
 
   const handleFile = useCallback(async (file: File) => {
-    setLoading(true);
+    setUploadProgress(0);
     try {
-      const result = await processFile(file);
+      const result = await processFile(file, (pct) => setUploadProgress(pct));
       onAdded(result.fileId, result.previewUrl, result.isVideo, result.w, result.h);
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      setUploadProgress(null);
     }
   }, [onAdded]);
 
@@ -239,10 +239,10 @@ function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected, onReo
       {/* Drop area — border kept intentionally */}
       <div
         {...getRootProps()}
-        onClick={() => inputRef.current?.click()}
+        onClick={() => uploadProgress === null && inputRef.current?.click()}
         style={{
           position: 'relative', borderRadius: 12, overflow: 'hidden',
-          height: 56, background: colors.bgRow, cursor: 'pointer',
+          height: 56, background: colors.bgRow, cursor: uploadProgress !== null ? 'default' : 'pointer',
           border: isDragActive ? `1.5px dashed ${colors.accent}` : `1.5px dashed ${colors.dropBorder}`,
           transition: 'border-color 0.15s',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -251,9 +251,18 @@ function MediaSection({ items, selectedId, onAdded, onRemoved, onSelected, onReo
         <input {...getInputProps()} />
         <input ref={inputRef} type="file" accept="image/*,video/*,.mkv" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
-        <UploadIcon color={colors.fgMuted} />
-        <span style={{ fontSize: 11, color: loading ? colors.accent : colors.fgDim, fontWeight: 500 }}>
-          {loading ? 'Uploading…' : isDragActive ? 'Drop to add' : 'Add media'}
+
+        {/* Upload progress bar */}
+        {uploadProgress !== null && (
+          <>
+            <div style={{ position: 'absolute', inset: 0, background: `${colors.accent}18`, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, height: 3, background: colors.accent, borderRadius: '0 2px 0 0', transition: 'width 0.1s ease', width: `${uploadProgress}%` }} />
+          </>
+        )}
+
+        <UploadIcon color={uploadProgress !== null ? colors.accent : colors.fgMuted} />
+        <span style={{ fontSize: 11, color: uploadProgress !== null ? colors.accent : colors.fgDim, fontWeight: 500 }}>
+          {uploadProgress !== null ? `Uploading ${uploadProgress}%` : isDragActive ? 'Drop to add' : 'Add media'}
         </span>
       </div>
     </div>

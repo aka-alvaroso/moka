@@ -212,6 +212,14 @@ export function useEditor() {
       mediaItems: updateItem(s.mediaItems, itemId, (item) => ({ ...item, keyframes: [] })),
     }));
 
+  const setKeyframes = (itemId: string, keyframes: AnimationKeyframe[]) =>
+    setState((s) => ({
+      ...s,
+      mediaItems: updateItem(s.mediaItems, itemId, (item) => ({
+        ...item, keyframes: [...keyframes].sort((a, b) => a.time - b.time),
+      })),
+    }));
+
   // ── Global settings ─────────────────────────────────────────────────────────
 
   const setBackground = (background: Background) =>
@@ -227,7 +235,7 @@ export function useEditor() {
     state,
     addItem, removeItem, selectItem, reorderItem, moveItemToIndex,
     setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
-    addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeProps, updateKeyframeEasing, clearKeyframes,
+    addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeProps, updateKeyframeEasing, clearKeyframes, setKeyframes,
     setBackground, setCanvas, setAnimationConfig,
   };
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { EditorState } from '../hooks/useEditor';
 import type { CanvasRatio, ExportFormat } from '@mockup-forge/shared';
-import { renderExport, renderAnimationExport, downloadUrl } from '../lib/api';
+import { renderExport, renderAnimationExport, downloadUrl, fetchMediaInfo } from '../lib/api';
 
 const CANVAS_SIZES: Record<CanvasRatio, { w: number; h: number }> = {
   '1:1': { w: 1080, h: 1080 }, '16:9': { w: 1920, h: 1080 }, '4:5': { w: 1080, h: 1350 },
@@ -17,6 +17,7 @@ const CANVAS_SIZES: Record<CanvasRatio, { w: number; h: number }> = {
 
 const ACCENT = '#e94f37';
 type Resolution = '1x' | '2x' | '3x';
+type AnimExportMode = 'clip' | 'full';
 
 interface Props {
   state: EditorState;
@@ -25,13 +26,14 @@ interface Props {
 }
 
 export function ExportDrawer({ state, open, onClose }: Props) {
-  const [resolution, setResolution] = useState<Resolution>('1x');
-  const [format, setFormat] = useState<'png' | 'jpg'>('png');
-  const [loading, setLoading] = useState(false);
+  const [resolution, setResolution]       = useState<Resolution>('1x');
+  const [format, setFormat]               = useState<'png' | 'jpg'>('png');
+  const [animMode, setAnimMode]           = useState<AnimExportMode>('clip');
+  const [loading, setLoading]             = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const hasItems = state.mediaItems.length > 0;
-  const hasVideo = state.mediaItems.some((i) => i.isVideo);
+  const hasItems    = state.mediaItems.length > 0;
+  const hasVideo    = state.mediaItems.some((i) => i.isVideo);
   const hasAnimation = state.mediaItems.some((i) => i.keyframes.length >= 2);
 
   useEffect(() => {
@@ -82,6 +84,17 @@ export function ExportDrawer({ state, open, onClose }: Props) {
     if (!hasItems) return;
     setLoading(true);
     try {
+      // In 'full' mode, use the longest video's duration so the animation holds
+      // its final state for the rest of the clip. The interpolation already
+      // returns the last keyframe's props for any t past the last keyframe.
+      let exportDuration = state.animationDuration;
+      if (animMode === 'full' && hasVideo) {
+        const videoItems = state.mediaItems.filter((i) => i.isVideo);
+        const durations = await Promise.all(videoItems.map((i) => fetchMediaInfo(i.fileId).then((m) => m.duration)));
+        const maxVideo = Math.max(...durations.filter((d) => d > 0));
+        if (maxVideo > exportDuration) exportDuration = maxVideo;
+      }
+
       const res = await renderAnimationExport({
         items: buildRenderItems().map((item) => {
           const mediaItem = state.mediaItems.find((i) => i.id === item.id)!;
@@ -89,7 +102,7 @@ export function ExportDrawer({ state, open, onClose }: Props) {
         }),
         background: state.background,
         canvas: state.canvas,
-        duration: state.animationDuration,
+        duration: exportDuration,
         fps: state.animationFps,
       });
       const a = document.createElement('a');
@@ -171,12 +184,36 @@ export function ExportDrawer({ state, open, onClose }: Props) {
               {hasAnimation && (
                 <>
                   <div style={{ borderTop: '1px solid #f0f0f0', margin: '2px 0' }} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <span style={labelStyle}>Animation</span>
-                    <span style={{ fontSize: 11, color: '#888' }}>
-                      {state.animationDuration}s · {state.animationFps} fps
+
+                    {hasVideo && (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={() => setAnimMode('clip')}
+                          style={optionBtnStyle(animMode === 'clip')}
+                        >
+                          <span style={{ fontWeight: 700 }}>Clip</span>
+                          <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.6 }}>{state.animationDuration}s</span>
+                        </button>
+                        <button
+                          onClick={() => setAnimMode('full')}
+                          style={optionBtnStyle(animMode === 'full')}
+                        >
+                          <span style={{ fontWeight: 700 }}>Full video</span>
+                          <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.6 }}>hold last frame</span>
+                        </button>
+                      </div>
+                    )}
+
+                    <span style={{ fontSize: 11, color: '#999' }}>
+                      {animMode === 'full' && hasVideo
+                        ? `Animation plays for ${state.animationDuration}s, video continues to its end`
+                        : `${state.animationDuration}s · ${state.animationFps} fps`}
                     </span>
                   </div>
+
                   <button onClick={triggerAnimation} disabled={loading} style={{ ...triggerBtnStyle(loading), background: '#111' }}>
                     {loading ? 'Rendering…' : 'Export Animation MP4'}
                   </button>

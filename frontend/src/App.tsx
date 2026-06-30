@@ -7,6 +7,8 @@ import { RightPanel } from './components/RightPanel';
 import { ExportDrawer } from './components/ExportDrawer';
 import { LegalModal } from './components/LegalModal';
 import { TimelineBar } from './components/TimelineBar';
+import { AnimationPresetsPanel } from './components/AnimationPresetsPanel';
+import { contentToAnimatedProps } from './hooks/useEditor';
 import { interpolateProps } from './lib/interpolate';
 import { useTheme } from './context/ThemeContext';
 import type { ThemeMode } from './context/ThemeContext';
@@ -19,7 +21,7 @@ export default function App() {
     state,
     addItem, removeItem, selectItem, moveItemToIndex,
     setItemContent, setItemContentAndKeyframe, setItemVideoEndBehavior,
-    addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeProps, updateKeyframeEasing, clearKeyframes,
+    addKeyframe, removeKeyframe, moveKeyframe, duplicateKeyframe, updateKeyframeProps, updateKeyframeEasing, clearKeyframes, setKeyframes,
     setBackground, setCanvas, setAnimationConfig,
   } = useEditor();
 
@@ -35,6 +37,7 @@ export default function App() {
   const [settingsOpen,   setSettingsOpen]   = useState(false);
   const [loop,           setLoop]           = useState(false);
   const [selectedKfId,   setSelectedKfId]   = useState<string | null>(null);
+  const [timelineView,   setTimelineView]   = useState<'presets' | 'keyframes'>('presets');
   const [leftOpen,       setLeftOpen]       = useState(true);
   const [rightOpen,      setRightOpen]      = useState(true);
   const [windowWidth,    setWindowWidth]    = useState(window.innerWidth);
@@ -268,7 +271,10 @@ export default function App() {
 
             {/* Animate / Close */}
             <button
-              onClick={() => setTimelineOpen((v) => !v)}
+              onClick={() => setTimelineOpen((v) => {
+                if (!v) setTimelineView('presets');
+                return !v;
+              })}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '10px 28px',
                 borderRadius: 12, fontSize: 13, fontWeight: 900,
@@ -366,7 +372,7 @@ export default function App() {
               fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
               color: ACCENT, background: ACCENT + '18',
               padding: '2px 8px', borderRadius: 6,
-            }}>v1.0.0</span>
+            }}>v1.1.0</span>
           </footer>
         </div>
 
@@ -387,7 +393,7 @@ export default function App() {
         </motion.div>
       </div>
 
-      {/* Timeline bar */}
+      {/* Animation zone: tabs + panel */}
       <AnimatePresence>
         {timelineOpen && (
           <motion.div
@@ -397,26 +403,82 @@ export default function App() {
             transition={{ type: 'spring', stiffness: 380, damping: 32 }}
             style={{ overflow: 'hidden', flexShrink: 0 }}
           >
-            <TimelineBar
-              animation={animationConfig}
-              currentTime={currentTime}
-              selectedKfId={selectedKfId}
-              onKeyframeSelect={setSelectedKfId}
-              onTimeChange={(t) => { setCurrentTime(t); if (playing) stopPlayback(); }}
-              onScrubStart={() => setScrubbing(true)}
-              onScrubEnd={() => setScrubbing(false)}
-              onAddKeyframe={(time) => { if (state.selectedItemId) addKeyframe(state.selectedItemId, time); }}
-              onMoveKeyframe={(kfId, time) => { if (state.selectedItemId) moveKeyframe(state.selectedItemId, kfId, time); }}
-              onDuplicateKeyframe={(kfId) => { if (state.selectedItemId) duplicateKeyframe(state.selectedItemId, kfId, currentTime); }}
-              onRemoveKeyframe={(kfId) => { if (state.selectedItemId) removeKeyframe(state.selectedItemId, kfId); }}
-              onClearKeyframes={() => { if (state.selectedItemId) clearKeyframes(state.selectedItemId); }}
-              onUpdateEasing={(kfId, easing) => { if (state.selectedItemId) updateKeyframeEasing(state.selectedItemId, kfId, easing); }}
-              onAnimationChange={(patch) => setAnimationConfig({
-                ...(patch.enabled   !== undefined && { animationEnabled:   patch.enabled   }),
-                ...(patch.duration  !== undefined && { animationDuration:  patch.duration  }),
-                ...(patch.fps       !== undefined && { animationFps:       patch.fps       }),
-              })}
-            />
+            {/* Tab bar */}
+            <div style={{
+              background: '#080808',
+              borderTop: '1px solid rgba(255,255,255,0.06)',
+              padding: '10px 20px 8px',
+              display: 'flex', alignItems: 'center',
+            }}>
+              <div style={{
+                display: 'inline-flex',
+                background: 'rgba(255,255,255,0.04)',
+                borderRadius: 10,
+                padding: 3,
+                gap: 2,
+              }}>
+                {(['presets', 'keyframes'] as const).map((view) => {
+                  const active = timelineView === view;
+                  return (
+                    <button
+                      key={view}
+                      onClick={() => setTimelineView(view)}
+                      style={{
+                        padding: '5px 16px',
+                        borderRadius: 7,
+                        border: 'none',
+                        background: active ? 'rgba(255,255,255,0.09)' : 'transparent',
+                        color: active ? '#d0d0d0' : '#3a3a3a',
+                        fontSize: 11, fontWeight: 700,
+                        letterSpacing: '0.04em', cursor: 'pointer',
+                        transition: 'color 0.15s, background 0.15s',
+                        textTransform: 'capitalize',
+                      }}
+                      onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = '#777'; }}
+                      onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = '#3a3a3a'; }}
+                    >
+                      {view === 'presets' ? 'Presets' : 'Keyframes'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Panel content */}
+            {timelineView === 'presets' ? (
+              <AnimationPresetsPanel
+                baseProps={selectedItem ? contentToAnimatedProps(selectedItem.content) : null}
+                animationDuration={state.animationDuration}
+                onApply={(keyframes) => {
+                  if (state.selectedItemId) {
+                    setKeyframes(state.selectedItemId, keyframes);
+                    setTimelineView('keyframes');
+                    setCurrentTime(0);
+                  }
+                }}
+              />
+            ) : (
+              <TimelineBar
+                animation={animationConfig}
+                currentTime={currentTime}
+                selectedKfId={selectedKfId}
+                onKeyframeSelect={setSelectedKfId}
+                onTimeChange={(t) => { setCurrentTime(t); if (playing) stopPlayback(); }}
+                onScrubStart={() => setScrubbing(true)}
+                onScrubEnd={() => setScrubbing(false)}
+                onAddKeyframe={(time) => { if (state.selectedItemId) addKeyframe(state.selectedItemId, time); }}
+                onMoveKeyframe={(kfId, time) => { if (state.selectedItemId) moveKeyframe(state.selectedItemId, kfId, time); }}
+                onDuplicateKeyframe={(kfId) => { if (state.selectedItemId) duplicateKeyframe(state.selectedItemId, kfId, currentTime); }}
+                onRemoveKeyframe={(kfId) => { if (state.selectedItemId) removeKeyframe(state.selectedItemId, kfId); }}
+                onClearKeyframes={() => { if (state.selectedItemId) clearKeyframes(state.selectedItemId); }}
+                onUpdateEasing={(kfId, easing) => { if (state.selectedItemId) updateKeyframeEasing(state.selectedItemId, kfId, easing); }}
+                onAnimationChange={(patch) => setAnimationConfig({
+                  ...(patch.enabled   !== undefined && { animationEnabled:   patch.enabled   }),
+                  ...(patch.duration  !== undefined && { animationDuration:  patch.duration  }),
+                  ...(patch.fps       !== undefined && { animationFps:       patch.fps       }),
+                })}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

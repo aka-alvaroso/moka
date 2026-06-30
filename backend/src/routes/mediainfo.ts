@@ -19,9 +19,11 @@ mediainfoRouter.get('/:fileId', (req, res) => {
       return;
     }
     const stream = data.streams.find((s) => s.codec_type === 'video');
+    const duration = typeof data.format.duration === 'number' ? data.format.duration : 0;
     res.json({
-      width:  stream?.width  ?? 0,
-      height: stream?.height ?? 0,
+      width:    stream?.width  ?? 0,
+      height:   stream?.height ?? 0,
+      duration,
     });
   });
 });

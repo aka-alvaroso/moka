@@ -49,6 +49,7 @@ export function EditorCanvas({ state, onItemContentChange, onItemSelected, onIte
   const [container, setContainer] = useState({ w: 600, h: 600 });
   const [guides, setGuides] = useState({ x: false, y: false });
   const [emptyHovered, setEmptyHovered] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -70,28 +71,35 @@ const ratio = canvasAspectRatio(canvas);
     const file = accepted[0];
     if (!file) return;
     const isMkv = file.name.toLowerCase().endsWith('.mkv');
-    const res = await uploadFile(file);
-    let dims: { w: number; h: number };
-    if (isMkv) {
-      const info = await fetchMediaInfo(res.fileId);
-      dims = { w: info.width, h: info.height };
-    } else {
-      dims = await new Promise((resolve) => {
-        const url = URL.createObjectURL(file);
-        if (file.type.startsWith('video/')) {
-          const v = document.createElement('video');
-          v.onloadedmetadata = () => { resolve({ w: v.videoWidth, h: v.videoHeight }); URL.revokeObjectURL(url); };
-          v.onerror = () => { resolve({ w: 0, h: 0 }); URL.revokeObjectURL(url); };
-          v.src = url;
-        } else {
-          const img = new Image();
-          img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url); };
-          img.src = url;
-        }
-      });
+    setUploadProgress(0);
+    try {
+      const res = await uploadFile(file, (pct) => setUploadProgress(pct));
+      let dims: { w: number; h: number };
+      if (isMkv) {
+        const info = await fetchMediaInfo(res.fileId);
+        dims = { w: info.width, h: info.height };
+      } else {
+        dims = await new Promise((resolve) => {
+          const url = URL.createObjectURL(file);
+          if (file.type.startsWith('video/')) {
+            const v = document.createElement('video');
+            v.onloadedmetadata = () => { resolve({ w: v.videoWidth, h: v.videoHeight }); URL.revokeObjectURL(url); };
+            v.onerror = () => { resolve({ w: 0, h: 0 }); URL.revokeObjectURL(url); };
+            v.src = url;
+          } else {
+            const img = new Image();
+            img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url); };
+            img.src = url;
+          }
+        });
+      }
+      const localUrl = isMkv ? `/api/download/${res.fileId}` : URL.createObjectURL(file);
+      onItemAdded(res.fileId, localUrl, res.isVideo, dims.w, dims.h);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploadProgress(null);
     }
-    const localUrl = isMkv ? `/api/download/${res.fileId}` : URL.createObjectURL(file);
-    onItemAdded(res.fileId, localUrl, res.isVideo, dims.w, dims.h);
   }, [onItemAdded]);
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
@@ -203,6 +211,16 @@ const ratio = canvasAspectRatio(canvas);
               <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
             <span style={{ color: 'white', fontSize: 13, fontWeight: 500 }}>Drop to add layer</span>
+          </div>
+        )}
+
+        {/* Upload progress overlay */}
+        {uploadProgress !== null && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, pointerEvents: 'none', zIndex: 51 }}>
+            <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 600 }}>{uploadProgress}%</span>
+            <div style={{ width: 140, height: 3, background: 'rgba(255,255,255,0.15)', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${uploadProgress}%`, background: '#e94f37', borderRadius: 99, transition: 'width 0.1s ease' }} />
+            </div>
           </div>
         )}
 
