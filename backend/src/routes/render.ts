@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { renderVideo } from '../services/videoRenderer';
 import { renderAnimation } from '../services/animationRenderer';
+import { canUseAnimationSplit, lastKeyframeTime } from '../services/animationSplitRenderer';
 import { screenshotRenderState } from '../services/puppeteerRenderer';
 import { getRenderState } from '../services/renderStateStore';
 import { getCanvasSize, resolutionScale } from '../services/frameRenderer';
@@ -37,6 +38,12 @@ const MAX_RENDER_DURATION = Number(process.env.MAX_RENDER_DURATION ?? 300); // s
 const MAX_RENDER_FPS    = Number(process.env.MAX_RENDER_FPS     ?? 60);
 const MAX_RENDER_FRAMES = Number(process.env.MAX_RENDER_FRAMES  ?? 3600);
 const MAX_RENDER_ITEMS  = Number(process.env.MAX_RENDER_ITEMS   ?? 20);
+// The expensive part of an animation export is the per-frame Puppeteer capture of
+// the animated keyframe span (the static "hold" is cheap FFmpeg). On a modest host
+// (e.g. 2 vCPU VPS) a very long span can't finish before the render timeout. This
+// caps the CAPTURED-frame count specifically. Default is effectively unlimited so
+// dev is unaffected; set MAX_ANIMATED_FRAMES low in production (e.g. 600).
+const MAX_ANIMATED_FRAMES = Number(process.env.MAX_ANIMATED_FRAMES ?? 100000);
 
 /**
  * Validates the final rendered pixel count (preset size × resolution scale).
@@ -79,6 +86,15 @@ function validateAnimationPayload(payload: MultiAnimationRenderPayload): string 
   if (payload.fps > MAX_RENDER_FPS) return `FPS too high (max ${MAX_RENDER_FPS})`;
   const frames = Math.ceil(payload.duration * payload.fps);
   if (frames > MAX_RENDER_FRAMES) return `Too many frames (max ${MAX_RENDER_FRAMES})`;
+
+  // Cap the Puppeteer-captured frame count (the animated span). The split path
+  // only captures up to the last keyframe; other paths capture the full duration.
+  const capturedFrames = canUseAnimationSplit(payload)
+    ? Math.ceil(lastKeyframeTime(payload) * payload.fps)
+    : Math.ceil(payload.duration * payload.fps);
+  if (capturedFrames > MAX_ANIMATED_FRAMES) {
+    return `Animation is too long to export on this server (${capturedFrames} animated frames; max ${MAX_ANIMATED_FRAMES}). Shorten the animation or lower the frame rate.`;
+  }
   return null;
 }
 

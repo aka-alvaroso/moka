@@ -19,6 +19,18 @@ const ACCENT = '#e94f37';
 type Resolution = '1x' | '2x' | '3x';
 type AnimExportMode = 'clip' | 'full';
 
+// The API throws Error(response body); render errors come back as {"error":"…"}.
+// Surface that human-readable reason (e.g. "Animation too long…") instead of a
+// generic "check the logs" message the user can't act on.
+function serverErrorMessage(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  try {
+    const parsed = JSON.parse(raw) as { error?: string };
+    if (parsed?.error) return parsed.error;
+  } catch { /* not JSON — fall through */ }
+  return raw && raw.length < 200 ? raw : fallback;
+}
+
 interface Props {
   state: EditorState;
   open: boolean;
@@ -74,7 +86,7 @@ export function ExportDrawer({ state, open, onClose }: Props) {
       onClose();
     } catch (err) {
       console.error('Export failed', err);
-      alert('Export failed. Check backend logs.');
+      alert(serverErrorMessage(err, 'Export failed. Check backend logs.'));
     } finally {
       setLoading(false);
     }
@@ -112,7 +124,7 @@ export function ExportDrawer({ state, open, onClose }: Props) {
       onClose();
     } catch (err) {
       console.error('Animation export failed', err);
-      alert('Animation export failed. Check backend logs.');
+      alert(serverErrorMessage(err, 'Animation export failed. Check backend logs.'));
     } finally {
       setLoading(false);
     }
