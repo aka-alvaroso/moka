@@ -24,6 +24,7 @@
 import fs from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
+import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import { tmpPath } from './fileManager';
 import { captureFrameSequence, screenshotRenderState, closeBrowser } from './puppeteerRenderer';
@@ -85,30 +86,22 @@ function finalContent(item: MultiAnimationRenderPayload['items'][number]): Conte
 // White rounded-rect on black at the video's display size. Used by FFmpeg
 // `alphamerge` so the composited video gets the SAME rounded corners CSS draws.
 
-async function makeRoundedMask(w: number, h: number, radius: number, signal?: AbortSignal): Promise<string> {
+async function makeRoundedMask(w: number, h: number, radius: number): Promise<string> {
   const filename = `mask_${uuidv4()}.png`;
   const out = tmpPath(filename);
-  const cxh = (w / 2).toFixed(3), cyh = (h / 2).toFixed(3);
-  const bxh = Math.max(0, w / 2 - radius).toFixed(3), byh = Math.max(0, h / 2 - radius).toFixed(3);
-  const r = radius.toFixed(3);
-  // 255 inside the rounded rect, 0 outside. hypot of the per-axis overflow past
-  // the straight-edge core gives the standard rounded-rect signed distance.
-  // Single-quoted in the filter string below, so commas stay literal (no escaping).
-  const expr = `if(lte(hypot(max(abs(X-${cxh})-${bxh},0),max(abs(Y-${cyh})-${byh},0)),${r}),255,0)`;
-
-  await new Promise<void>((resolve, reject) => {
-    const cmd = ffmpeg()
-      .input(`color=c=black:s=${w}x${h}:d=1`).inputOptions(['-f lavfi'])
-      .videoFilter(`format=gray,geq=lum='${expr}'`)
-      .outputOptions(['-frames:v 1', '-update 1'])
-      .output(out);
-    const onAbort = () => { try { cmd.kill('SIGKILL'); } catch { /* done */ } };
-    signal?.addEventListener('abort', onAbort, { once: true });
-    cmd
-      .on('end', () => { signal?.removeEventListener('abort', onAbort); resolve(); })
-      .on('error', (e: Error) => { signal?.removeEventListener('abort', onAbort); reject(e); })
-      .run();
-  });
+  // White rounded-rect on black. alphamerge reads luma as alpha, so white = opaque
+  // (video shows) and the black corners = transparent (background shows through).
+  //
+  // Rendered with sharp (SVG → PNG) rather than FFmpeg: it needs no `lavfi` input
+  // device (minimal/system ffmpeg builds on Linux servers often lack it) and the
+  // SVG rounded rect matches CSS border-radius geometry more faithfully.
+  const r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+    `<rect width="${w}" height="${h}" fill="black"/>` +
+    `<rect width="${w}" height="${h}" rx="${r.toFixed(3)}" ry="${r.toFixed(3)}" fill="white"/>` +
+    `</svg>`;
+  await sharp(Buffer.from(svg)).png().toFile(out);
   return filename;
 }
 
@@ -196,7 +189,7 @@ export async function renderAnimationSplit(
 
   // Rounded mask (skip when there's effectively no corner radius).
   await closeBrowser(); // free Chrome RAM before the encode
-  const maskPath = radius > 0.5 ? tmpPath(await makeRoundedMask(dw, dh, radius, signal)) : null;
+  const maskPath = radius > 0.5 ? tmpPath(await makeRoundedMask(dw, dh, radius)) : null;
 
   // ── 4. Single FFmpeg pass: seg1 frames + seg2 composite → concat ────────────
   const r = fps > 0 && Number.isFinite(fps) ? fps.toFixed(3) : '30';
