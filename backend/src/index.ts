@@ -117,7 +117,14 @@ if (process.env.PUPPETEER_NO_SANDBOX === 'true') {
   console.warn('[security] PUPPETEER_NO_SANDBOX=true — Chrome sandbox is disabled. Only do this when running as root in a container.');
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
   console.log(`CORS allowed origin: ${allowedOrigin}`);
 });
+
+// A render holds one request open for minutes (Puppeteer capture + FFmpeg). Node's
+// default requestTimeout (5 min since Node 18) would sever the connection before a
+// long animation finishes — the client sees "failed" even though the backend keeps
+// going and writes the file. The render queue enforces its own hard cap, so lift
+// the HTTP-level request timeout so the response actually reaches the client.
+server.requestTimeout = 0;   // default 300000 ms (Node 18+) → no request-duration limit
