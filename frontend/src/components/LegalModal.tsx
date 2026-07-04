@@ -19,7 +19,7 @@ We do not collect personal data, create user accounts, or use cookies for tracki
     },
     {
       heading: 'Third-party services',
-      body: `Moka loads fonts from Google Fonts (fonts.googleapis.com). Google may collect limited request metadata such as your IP address and browser version as part of this request. Please refer to Google's Privacy Policy for details.`,
+      body: `Moka self-hosts its fonts and does not load resources from third-party CDNs, so no request metadata is shared with external font or analytics providers.`,
     },
     {
       heading: 'Your rights',

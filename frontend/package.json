@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/rubik": "^5.2.8",
     "@mockup-forge/shared": "workspace:*",
     "lucide-react": "^1.22.0",
     "motion": "^12.40.0",
