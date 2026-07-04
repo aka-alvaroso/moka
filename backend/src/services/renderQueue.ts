@@ -5,14 +5,17 @@
 // Env vars (all optional):
 //   MAX_RENDER_CONCURRENCY  – parallel jobs allowed (default 2)
 //   MAX_RENDER_QUEUE        – requests that may wait before returning 503 (default 4)
-//   RENDER_TIMEOUT_MS       – per-job hard timeout in ms (default 300000 = 5 min)
+//   RENDER_TIMEOUT_MS       – per-job hard timeout in ms (default 900000 = 15 min)
+//     Heavy animation exports (long keyframe spans → hundreds of Puppeteer
+//     screenshots) can legitimately take 5–8 min, so the wall-clock cap is
+//     generous. Lower it via env on shared/production hosts if needed.
 //
 // The AbortSignal passed to each job is aborted on timeout (or on any error),
 // so callers can wire up FFmpeg.kill() and Puppeteer page.close() to it.
 
 const MAX_CONCURRENT = Number(process.env.MAX_RENDER_CONCURRENCY ?? 2);
 const MAX_QUEUED     = Number(process.env.MAX_RENDER_QUEUE        ?? 4);
-const JOB_TIMEOUT_MS = Number(process.env.RENDER_TIMEOUT_MS       ?? 5 * 60 * 1000);
+const JOB_TIMEOUT_MS = Number(process.env.RENDER_TIMEOUT_MS       ?? 15 * 60 * 1000);
 
 let active = 0;
 const waiters: Array<() => void> = [];
