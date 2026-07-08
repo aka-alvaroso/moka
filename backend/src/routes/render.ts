@@ -34,16 +34,17 @@ function requireRenderToken(req: Request, res: Response, next: NextFunction) {
 // 16 MP covers yt-banner at 2x (5120×2880 = 14.7 MP) while blocking all 3x
 // renders of large presets (yt-banner at 3x = 33 MP).
 const MAX_CANVAS_MPIX   = Number(process.env.MAX_CANVAS_MPIX    ?? 16);
-const MAX_RENDER_DURATION = Number(process.env.MAX_RENDER_DURATION ?? 300); // seconds
-const MAX_RENDER_FPS    = Number(process.env.MAX_RENDER_FPS     ?? 60);
+// Defaults tuned for a small/single-vCPU host — raise via env if your host has
+// headroom (e.g. dev, or a beefier VPS).
+const MAX_RENDER_DURATION = Number(process.env.MAX_RENDER_DURATION ?? 120); // seconds
+const MAX_RENDER_FPS    = Number(process.env.MAX_RENDER_FPS     ?? 30);
 const MAX_RENDER_FRAMES = Number(process.env.MAX_RENDER_FRAMES  ?? 3600);
 const MAX_RENDER_ITEMS  = Number(process.env.MAX_RENDER_ITEMS   ?? 20);
 // The expensive part of an animation export is the per-frame Puppeteer capture of
 // the animated keyframe span (the static "hold" is cheap FFmpeg). On a modest host
-// (e.g. 2 vCPU VPS) a very long span can't finish before the render timeout. This
-// caps the CAPTURED-frame count specifically. Default is effectively unlimited so
-// dev is unaffected; set MAX_ANIMATED_FRAMES low in production (e.g. 600).
-const MAX_ANIMATED_FRAMES = Number(process.env.MAX_ANIMATED_FRAMES ?? 100000);
+// a very long span can't finish before the render timeout. This caps the
+// CAPTURED-frame count specifically. Raise via env if exports get cut short.
+const MAX_ANIMATED_FRAMES = Number(process.env.MAX_ANIMATED_FRAMES ?? 600);
 
 /**
  * Validates the final rendered pixel count (preset size × resolution scale).
