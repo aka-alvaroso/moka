@@ -24,6 +24,12 @@ import type {
 if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
 if (ffprobeStatic?.path) ffmpeg.setFfprobePath(ffprobeStatic.path);
 
+// CPU threads FFmpeg's encoder may use per render job (single source for every
+// renderer). Lower this on small hosts so one job doesn't saturate every core —
+// pair it with MAX_RENDER_CONCURRENCY so (threads × concurrency) stays within
+// the host's vCPU count, e.g. a 2 vCPU host wants either 1×2 or 2×1.
+export const FFMPEG_THREADS = process.env.FFMPEG_THREADS ?? '2';
+
 // ── Canvas sizes (single source for every renderer) ───────────────────────────
 
 export const CANVAS_SIZES: Record<string, { w: number; h: number }> = {
@@ -143,6 +149,7 @@ export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
         '-colorspace bt709', '-color_primaries bt709', '-color_trc bt709',
         '-movflags +faststart',
         `-r ${fps}`,
+        `-threads ${FFMPEG_THREADS}`,
         ...(audioFromFile ? ['-map 0:v', '-map 1:a?', '-c:a aac', '-shortest'] : ['-map 0:v']),
       ])
       .output(outputPath)

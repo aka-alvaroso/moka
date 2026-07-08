@@ -28,7 +28,7 @@ import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import { tmpPath } from './fileManager';
 import { captureFrameSequence, screenshotRenderState, closeBrowser } from './puppeteerRenderer';
-import { probeMedia, getCanvasSize } from './frameRenderer';
+import { probeMedia, getCanvasSize, FFMPEG_THREADS } from './frameRenderer';
 import { computeItemGeometry } from '@mockup-forge/shared';
 import type {
   MultiAnimationRenderPayload, PuppeteerRenderState, PuppeteerItem,
@@ -273,7 +273,7 @@ export async function renderAnimationSplit(
         '-c:v libx264', '-crf 18', '-preset fast', '-pix_fmt yuv420p',
         '-colorspace bt709', '-color_primaries bt709', '-color_trc bt709',
         '-fps_mode cfr', `-r ${r}`, '-max_muxing_queue_size 1024',
-        '-threads 2', '-movflags +faststart',
+        `-threads ${FFMPEG_THREADS}`, '-movflags +faststart',
       ])
       .output(outputPath)
       .on('start',  (c)    => console.log('[split-anim]', c))

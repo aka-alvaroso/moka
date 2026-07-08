@@ -22,7 +22,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { tmpPath } from './fileManager';
 import { screenshotRenderState, closeBrowser } from './puppeteerRenderer';
 import {
-  renderFrames, getCanvasSize, resolutionScale, probeMedia,
+  renderFrames, getCanvasSize, resolutionScale, probeMedia, FFMPEG_THREADS,
 } from './frameRenderer';
 import { PayloadValidationError } from './renderQueue';
 import { computeItemGeometry } from '@mockup-forge/shared';
@@ -234,7 +234,7 @@ async function renderVideoHybrid(
       // Constant output framerate + bounded muxer queue: defend against VFR/B-frame
       // sources that otherwise stall or balloon memory in the filter graph.
       '-fps_mode cfr', `-r ${r}`, '-max_muxing_queue_size 1024',
-      '-threads 2',
+      `-threads ${FFMPEG_THREADS}`,
       '-movflags +faststart',
       ...(audioFromFile ? ['-map 1:a?', '-c:a aac'] : []),
       '-shortest',
