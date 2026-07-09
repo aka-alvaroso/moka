@@ -1,0 +1,25 @@
+services:
+  moka:
+    image: ghcr.io/aka-alvaroso/moka:latest
+    restart: unless-stopped
+    # SECURITY: this publishes the port straight to the host with no auth in
+    # front of it — RENDER_TOKEN does NOT protect the web UI (see .env.example).
+    # Fine for localhost-only / trusted-LAN use. For anything reachable from
+    # the internet, put a reverse proxy in front (Caddy basic_auth, an IP
+    # allowlist, a VPN/Tailscale, etc.) instead of exposing this directly.
+    ports:
+      - "${PORT:-4003}:4003"
+    env_file:
+      - .env
+    # Hard resource ceiling at the container level — tune to your host's specs.
+    # These are independent of the MAX_*/FFMPEG_THREADS app-level limits in
+    # .env: the container limits protect the host from a runaway process, the
+    # app-level ones keep individual renders within that budget.
+    mem_limit: 1g
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
