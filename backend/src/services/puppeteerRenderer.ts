@@ -32,7 +32,15 @@ async function getBrowser(): Promise<Browser> {
   return _browser;
 }
 
-const RENDERER_URL = process.env.RENDERER_URL ?? 'http://localhost:5173';
+// In dev, Vite serves the frontend separately (default port 5173). In
+// production (NODE_ENV=production — set by the Docker image, and required in
+// backend/.env.example for non-Docker deploys), the backend serves the built
+// frontend itself, so Puppeteer should hit the backend's own port instead.
+const RENDERER_URL = process.env.RENDERER_URL ?? (
+  process.env.NODE_ENV === 'production'
+    ? `http://localhost:${process.env.PORT || 3001}`
+    : 'http://localhost:5173'
+);
 
 // Free the shared Chrome instance — called before the long FFmpeg encode of the
 // hybrid path so the (idle) browser's RAM is available to ffmpeg on small hosts.
