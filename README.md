@@ -73,7 +73,7 @@ The recommended path — a prebuilt image is published automatically, so your se
 
 > The GitHub Container Registry package is private by default after the first CI build. Whoever owns the repo needs to flip it to public once (**GitHub → profile → Packages → moka → Package settings → Change visibility**), otherwise `docker compose pull` requires authentication.
 
-> **Security**: `docker-compose.yml` publishes the port straight to the host with no authentication in front of it. `RENDER_TOKEN` only gates direct API calls to the render endpoint — it does **not** protect the web UI, and the bundled UI doesn't even send it. Fine for localhost-only or trusted-LAN use; for anything reachable from the internet, put a reverse proxy in front (Caddy `basic_auth`, an IP allowlist, a VPN/Tailscale) instead of relying on `RENDER_TOKEN` alone.
+> **Security**: `docker-compose.yml` binds the port to `127.0.0.1` only — the container isn't reachable from outside this host unless something (a reverse proxy like Caddy/nginx) forwards to it. `RENDER_TOKEN` only gates direct API calls to the render endpoint — it does **not** protect the web UI, and the bundled UI doesn't even send it — so if you do put a reverse proxy in front for public access, add your own access control there too if you want one (Caddy `basic_auth`, an IP allowlist, a VPN/Tailscale) — otherwise anyone who finds the URL can use the full UI. If you change the bind to `0.0.0.0` to expose the container directly (no proxy), the same applies even more directly: `RENDER_TOKEN` alone won't protect the UI.
 
 ### Updating
 

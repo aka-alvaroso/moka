@@ -2,13 +2,16 @@ services:
   moka:
     image: ghcr.io/aka-alvaroso/moka:latest
     restart: unless-stopped
-    # SECURITY: this publishes the port straight to the host with no auth in
-    # front of it — RENDER_TOKEN does NOT protect the web UI (see .env.example).
-    # Fine for localhost-only / trusted-LAN use. For anything reachable from
-    # the internet, put a reverse proxy in front (Caddy basic_auth, an IP
-    # allowlist, a VPN/Tailscale, etc.) instead of exposing this directly.
+    # SECURITY: bound to loopback only, so the container is reachable solely
+    # via a reverse proxy (Caddy/nginx) running on this same host — never
+    # directly from the internet on <host-ip>:4003. RENDER_TOKEN does NOT
+    # protect the web UI (see .env.example), so this bind is the real
+    # boundary. If you genuinely have no reverse proxy and want LAN/internet
+    # access straight to the container, change this to "0.0.0.0:${PORT:-4003}:4003"
+    # (or just "${PORT:-4003}:4003") — but then put auth/rate-limiting
+    # somewhere in front, since RENDER_TOKEN alone won't cover the UI.
     ports:
-      - "${PORT:-4003}:4003"
+      - "127.0.0.1:${PORT:-4003}:4003"
     env_file:
       - .env
     # Hard resource ceiling at the container level — tune to your host's specs.
