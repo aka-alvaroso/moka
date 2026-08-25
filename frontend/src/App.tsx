@@ -375,7 +375,7 @@ export default function App() {
               fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
               color: ACCENT, background: ACCENT + '18',
               padding: '2px 8px', borderRadius: 6,
-            }}>v1.2.5</span>
+            }}>v1.3.0</span>
           </footer>
         </div>
 

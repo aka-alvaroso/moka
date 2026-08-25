@@ -6,7 +6,7 @@
 Compose designs onto realistic mockups and social presets, animate them, and export as image or video — pixel-exact, no design software required.
 
 [![Docker publish](https://github.com/aka-alvaroso/moka/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/aka-alvaroso/moka/actions/workflows/docker-publish.yml)
-![version](https://img.shields.io/badge/version-1.2.5-e94f37)
+![version](https://img.shields.io/badge/version-1.3.0-e94f37)
 ![node](https://img.shields.io/badge/node-22-339933?logo=node.js&logoColor=white)
 
 </div>
