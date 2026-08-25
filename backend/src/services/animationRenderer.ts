@@ -52,5 +52,6 @@ export async function renderAnimation(
     durationSec: duration,
     fps,
     signal,
+    jobId: payload.jobId,
   });
 }
