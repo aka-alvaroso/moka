@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { EditorState } from '../hooks/useEditor';
 import type { CanvasRatio, ExportFormat } from '@mockup-forge/shared';
-import { renderExport, renderAnimationExport, downloadUrl, fetchMediaInfo } from '../lib/api';
+import { renderExport, renderAnimationExport, resumeRenderJob, downloadUrl, fetchMediaInfo } from '../lib/api';
+import { saveActiveExportJob, loadActiveExportJob, clearActiveExportJob } from '../lib/exportJob';
 
 const CANVAS_SIZES: Record<CanvasRatio, { w: number; h: number }> = {
   '1:1': { w: 1080, h: 1080 }, '16:9': { w: 1920, h: 1080 }, '4:5': { w: 1080, h: 1350 },
@@ -42,6 +43,7 @@ export function ExportDrawer({ state, open, onClose }: Props) {
   const [format, setFormat]               = useState<'png' | 'jpg'>('png');
   const [animMode, setAnimMode]           = useState<AnimExportMode>('clip');
   const [loading, setLoading]             = useState(false);
+  const [progress, setProgress]           = useState<number | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const hasItems    = state.mediaItems.length > 0;
@@ -57,6 +59,29 @@ export function ExportDrawer({ state, open, onClose }: Props) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open, onClose]);
 
+  // Reconnect to an export that was still rendering when this page loaded —
+  // the job kept running server-side across the reload, so pick its progress
+  // back up instead of losing it.
+  useEffect(() => {
+    const job = loadActiveExportJob();
+    if (!job) return;
+    setLoading(true);
+    setProgress(0);
+    resumeRenderJob(job.jobId, setProgress)
+      .then((res) => {
+        const a = document.createElement('a');
+        a.href = downloadUrl(res.fileId);
+        a.download = job.filename;
+        a.click();
+      })
+      .catch((err) => console.warn('Could not recover in-progress export after reload:', err))
+      .finally(() => {
+        setLoading(false);
+        setProgress(null);
+        clearActiveExportJob();
+      });
+  }, []);
+
   const buildRenderItems = () =>
     state.mediaItems.map((item) => ({
       id: item.id,
@@ -71,6 +96,14 @@ export function ExportDrawer({ state, open, onClose }: Props) {
   const trigger = async (fmt: ExportFormat) => {
     if (!hasItems) return;
     setLoading(true);
+    // PNG/JPG exports are a single near-instant screenshot — only MP4 runs long
+    // enough (Puppeteer frames + FFmpeg encode) to be worth a progress readout
+    // and worth surviving a reload.
+    const jobId = fmt === 'mp4' ? crypto.randomUUID() : undefined;
+    if (jobId) {
+      setProgress(0);
+      saveActiveExportJob({ jobId, filename: `moka-export.${fmt}` });
+    }
     try {
       const res = await renderExport({
         items: buildRenderItems(),
@@ -78,7 +111,8 @@ export function ExportDrawer({ state, open, onClose }: Props) {
         canvas: state.canvas,
         format: fmt,
         resolution: fmt === 'mp4' ? '1x' : resolution,
-      });
+        ...(jobId ? { jobId } : {}),
+      }, jobId ? setProgress : undefined);
       const a = document.createElement('a');
       a.href = downloadUrl(res.fileId);
       a.download = `moka-export.${fmt}`;
@@ -89,12 +123,17 @@ export function ExportDrawer({ state, open, onClose }: Props) {
       alert(serverErrorMessage(err, 'Export failed. Check backend logs.'));
     } finally {
       setLoading(false);
+      setProgress(null);
+      if (jobId) clearActiveExportJob();
     }
   };
 
   const triggerAnimation = async () => {
     if (!hasItems) return;
     setLoading(true);
+    setProgress(0);
+    const jobId = crypto.randomUUID();
+    saveActiveExportJob({ jobId, filename: 'moka-animation.mp4' });
     try {
       // In 'full' mode, use the longest video's duration so the animation holds
       // its final state for the rest of the clip. The interpolation already
@@ -116,7 +155,8 @@ export function ExportDrawer({ state, open, onClose }: Props) {
         canvas: state.canvas,
         duration: exportDuration,
         fps: state.animationFps,
-      });
+        jobId,
+      }, setProgress);
       const a = document.createElement('a');
       a.href = downloadUrl(res.fileId);
       a.download = 'moka-animation.mp4';
@@ -127,12 +167,28 @@ export function ExportDrawer({ state, open, onClose }: Props) {
       alert(serverErrorMessage(err, 'Animation export failed. Check backend logs.'));
     } finally {
       setLoading(false);
+      setProgress(null);
+      clearActiveExportJob();
     }
   };
 
   return (
-    <AnimatePresence>
-      {open && (
+    <>
+      {/* Closing the drawer (or reloading) doesn't cancel the export — it keeps
+          rendering server-side, so keep a minimal readout visible either way. */}
+      {!open && progress !== null && (
+        <div style={{
+          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 99,
+          background: '#111', color: '#fff', borderRadius: 999, padding: '9px 16px',
+          display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+        }}>
+          <span>Exporting… {progress}%</span>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {open && (
         <motion.div
           ref={ref}
           initial={{ opacity: 0, y: 16, scale: 0.97 }}
@@ -152,9 +208,11 @@ export function ExportDrawer({ state, open, onClose }: Props) {
             </button>
           </div>
 
+          {progress !== null && <ProgressBar pct={progress} />}
+
           {hasVideo && !hasAnimation ? (
             <button onClick={() => trigger('mp4')} disabled={loading} style={triggerBtnStyle(loading)}>
-              {loading ? 'Rendering…' : 'Export MP4'}
+              {loading ? renderingLabel(progress) : 'Export MP4'}
             </button>
           ) : (
             <>
@@ -190,7 +248,7 @@ export function ExportDrawer({ state, open, onClose }: Props) {
               </div>
 
               <button onClick={() => trigger(format)} disabled={loading} style={triggerBtnStyle(loading)}>
-                {loading ? 'Rendering…' : `Export ${format.toUpperCase()} — ${resolution === '1x' ? 'Standard' : resolution === '2x' ? 'High' : 'Ultra'}`}
+                {loading ? renderingLabel(progress) : `Export ${format.toUpperCase()} — ${resolution === '1x' ? 'Standard' : resolution === '2x' ? 'High' : 'Ultra'}`}
               </button>
 
               {hasAnimation && (
@@ -227,15 +285,28 @@ export function ExportDrawer({ state, open, onClose }: Props) {
                   </div>
 
                   <button onClick={triggerAnimation} disabled={loading} style={{ ...triggerBtnStyle(loading), background: '#111' }}>
-                    {loading ? 'Rendering…' : 'Export Animation MP4'}
+                    {loading ? renderingLabel(progress) : 'Export Animation MP4'}
                   </button>
                 </>
               )}
             </>
           )}
         </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function renderingLabel(pct: number | null): string {
+  return pct === null ? 'Rendering…' : `Rendering… ${pct}%`;
+}
+
+function ProgressBar({ pct }: { pct: number }) {
+  return (
+    <div style={{ width: '100%', height: 4, background: '#f0f0f0', borderRadius: 99, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${pct}%`, background: ACCENT, borderRadius: 99, transition: 'width 0.2s ease' }} />
+    </div>
   );
 }
 

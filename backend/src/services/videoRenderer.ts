@@ -25,6 +25,8 @@ import {
   renderFrames, getCanvasSize, resolutionScale, probeMedia, FFMPEG_THREADS,
 } from './frameRenderer';
 import { PayloadValidationError } from './renderQueue';
+import { setRenderProgress } from './renderProgressStore';
+import { timemarkToSeconds } from './progressUtil';
 import { computeItemGeometry } from '@mockup-forge/shared';
 import type { MultiRenderPayload, PuppeteerItem, PuppeteerRenderState, RenderItem } from '@mockup-forge/shared';
 
@@ -84,6 +86,7 @@ export async function renderVideo(
     fps: DEFAULT_FPS,
     audioFromFile,
     signal,
+    jobId: payload.jobId,
   });
 }
 
@@ -99,6 +102,8 @@ async function renderVideoHybrid(
   audioFromFile: string | undefined,
   signal?: AbortSignal,
 ): Promise<string> {
+  setRenderProgress(payload.jobId, 0, 'preparing');
+
   // Split the static layers around the video by stacking order.
   const others = payload.items.filter((it) => it.id !== video.id);
   const aboveItems = others.filter((it) => it.zIndex > video.zIndex);
@@ -130,6 +135,7 @@ async function renderVideoHybrid(
   }
 
   signal?.throwIfAborted();
+  setRenderProgress(payload.jobId, 15, 'preparing');
 
   // 2. Video geometry — SAME formula as the preview (shared module).
   const g = computeItemGeometry(video.content, video.srcW, video.srcH, canvasW, canvasH);
@@ -217,6 +223,7 @@ async function renderVideoHybrid(
 
   // Plates are captured; release Chrome's RAM before the heavy ffmpeg encode.
   await closeBrowser();
+  setRenderProgress(payload.jobId, 20, 'encoding');
 
   await new Promise<void>((resolve, reject) => {
     const cmd = ffmpeg()
@@ -249,6 +256,11 @@ async function renderVideoHybrid(
       .output(outputPath)
       .on('start', (c) => console.log('[hybrid ffmpeg]', c))
       .on('stderr', (line) => console.log('[hybrid ffmpeg]', line))
+      .on('progress', (p: { timemark?: string }) => {
+        if (!p.timemark) return;
+        const pct = 20 + (timemarkToSeconds(p.timemark) / durationSec) * 80;
+        setRenderProgress(payload.jobId, Math.min(99, pct), 'encoding');
+      })
       .on('end', () => {
         signal?.removeEventListener('abort', onAbort);
         resolve();

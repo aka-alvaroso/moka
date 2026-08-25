@@ -17,6 +17,8 @@ import ffprobeStatic from 'ffprobe-static';
 import { tmpPath } from './fileManager';
 import { captureFrameSequence } from './puppeteerRenderer';
 import { PayloadValidationError } from './renderQueue';
+import { setRenderProgress } from './renderProgressStore';
+import { timemarkToSeconds } from './progressUtil';
 import type {
   PuppeteerRenderState, PuppeteerItem, Background, CanvasConfig,
 } from '@mockup-forge/shared';
@@ -97,11 +99,14 @@ export interface FrameRenderOptions {
   /** fileId whose audio track is muxed into the output (optional). */
   audioFromFile?: string;
   signal?: AbortSignal;
+  /** Client-generated id to report capture/encode progress under (optional). */
+  jobId?: string;
 }
 
 export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
-  const { items, background, canvas, canvasW, canvasH, durationSec, fps, audioFromFile, signal } = opts;
+  const { items, background, canvas, canvasW, canvasH, durationSec, fps, audioFromFile, signal, jobId } = opts;
   const totalFrames = Math.max(2, Math.round(durationSec * fps));
+  setRenderProgress(jobId, 0, 'capturing');
 
   const frameDir = tmpPath(`frames_${uuidv4()}`);
   fs.mkdirSync(frameDir, { recursive: true });
@@ -119,7 +124,10 @@ export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
   const captured = await captureFrameSequence(baseState, times, {
     frameDir, ext: 'jpg', quality: 95,
     concurrency: hasVideo ? 1 : undefined,
-    onProgress: (d, t) => console.log(`[frameRenderer] captured ${d}/${t} frames`),
+    onProgress: (d, t) => {
+      console.log(`[frameRenderer] captured ${d}/${t} frames`);
+      setRenderProgress(jobId, (d / t) * 70, 'capturing');
+    },
     signal,
   });
 
@@ -127,6 +135,7 @@ export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
   if (captured === 0) throw new Error('No frames were rendered');
 
   signal?.throwIfAborted();
+  setRenderProgress(jobId, 70, 'encoding');
 
   const outputFilename = `vid_${uuidv4()}.mp4`;
   const outputPath = tmpPath(outputFilename);
@@ -154,6 +163,11 @@ export async function renderFrames(opts: FrameRenderOptions): Promise<string> {
       ])
       .output(outputPath)
       .on('stderr', (line: string) => console.log('[ffmpeg]', line))
+      .on('progress', (p: { timemark?: string }) => {
+        if (!p.timemark) return;
+        const pct = 70 + (timemarkToSeconds(p.timemark) / durationSec) * 30;
+        setRenderProgress(jobId, Math.min(99, pct), 'encoding');
+      })
       .on('end', () => {
         signal?.removeEventListener('abort', onAbort);
         resolve();

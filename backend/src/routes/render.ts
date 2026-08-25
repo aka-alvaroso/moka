@@ -4,6 +4,7 @@ import { renderAnimation } from '../services/animationRenderer';
 import { canUseAnimationSplit, lastKeyframeTime } from '../services/animationSplitRenderer';
 import { screenshotRenderState } from '../services/puppeteerRenderer';
 import { getRenderState } from '../services/renderStateStore';
+import { getRenderProgress, setRenderResult, setRenderError } from '../services/renderProgressStore';
 import { getCanvasSize, resolutionScale } from '../services/frameRenderer';
 import {
   enqueueRender, renderQueueStats,
@@ -101,23 +102,26 @@ function validateAnimationPayload(payload: MultiAnimationRenderPayload): string 
 
 // ── Queue / error handler ─────────────────────────────────────────────────────
 
-function handleRenderError(err: unknown, res: Response, context: string) {
+function handleRenderError(err: unknown, res: Response, context: string, jobId?: string) {
+  let status: number;
+  let message: string;
+  let extra: Record<string, unknown> = {};
+
   if (err instanceof QueueFullError) {
-    res.status(503).json({ error: err.message, stats: renderQueueStats() });
-    return;
+    status = 503; message = err.message; extra = { stats: renderQueueStats() };
+  } else if (err instanceof RenderTimeoutError) {
+    status = 504; message = err.message;
+  } else if (err instanceof PayloadValidationError) {
+    status = 400; message = err.message;
+  } else {
+    // Log the full error server-side; return only a generic message so internal
+    // paths / FFmpeg command lines never reach the client.
+    console.error(`[${context}]`, err);
+    status = 500; message = `${context} failed`;
   }
-  if (err instanceof RenderTimeoutError) {
-    res.status(504).json({ error: err.message });
-    return;
-  }
-  if (err instanceof PayloadValidationError) {
-    res.status(400).json({ error: err.message });
-    return;
-  }
-  // Log the full error server-side; return only a generic message so internal
-  // paths / FFmpeg command lines never reach the client.
-  console.error(`[${context}]`, err);
-  res.status(500).json({ error: `${context} failed` });
+
+  setRenderError(jobId, message);
+  res.status(status).json({ error: message, ...extra });
 }
 
 // ── GET /state/:token — fetch stored render state ─────────────────────────────
@@ -129,6 +133,15 @@ renderRouter.get('/state/:token', (req, res) => {
     return;
   }
   res.json(state);
+});
+
+// ── GET /progress/:jobId — poll export progress for an in-flight render ───────
+// Never 404s: an unknown/not-yet-started jobId just reads as "queued" so the
+// frontend can start polling before the POST request's job has been picked up.
+
+renderRouter.get('/progress/:jobId', (req, res) => {
+  const progress = getRenderProgress(req.params.jobId);
+  res.json(progress ?? { percent: 0, phase: 'queued' });
 });
 
 // ── POST / — static render (PNG/JPG via Puppeteer, MP4 via frame capture) ─────
@@ -172,9 +185,11 @@ renderRouter.post('/', requireRenderToken, async (req, res) => {
       return screenshotRenderState(puppeteerState, payload.format, {}, signal);
     });
 
-    res.json({ fileId: outputFilename, downloadUrl: `/api/download/${outputFilename}` });
+    const downloadUrl = `/api/download/${outputFilename}`;
+    setRenderResult(payload.jobId, outputFilename, downloadUrl);
+    res.json({ fileId: outputFilename, downloadUrl });
   } catch (err) {
-    handleRenderError(err, res, 'render');
+    handleRenderError(err, res, 'render', payload.jobId);
   }
 });
 
@@ -191,8 +206,10 @@ renderRouter.post('/animation', requireRenderToken, async (req, res) => {
 
   try {
     const outputFilename = await enqueueRender((signal) => renderAnimation(payload, signal));
-    res.json({ fileId: outputFilename, downloadUrl: `/api/download/${outputFilename}` });
+    const downloadUrl = `/api/download/${outputFilename}`;
+    setRenderResult(payload.jobId, outputFilename, downloadUrl);
+    res.json({ fileId: outputFilename, downloadUrl });
   } catch (err) {
-    handleRenderError(err, res, 'render-animation');
+    handleRenderError(err, res, 'render-animation', payload.jobId);
   }
 });

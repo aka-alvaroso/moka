@@ -167,6 +167,9 @@ export interface MultiRenderPayload {
   canvas: CanvasConfig;
   format: ExportFormat;
   resolution?: '1x' | '2x' | '3x';
+  // Client-generated id used to poll GET /api/render/progress/:jobId while this
+  // render is in flight. Optional — omit it and no progress is tracked.
+  jobId?: string;
 }
 
 export interface MultiAnimationRenderPayload {
@@ -175,6 +178,7 @@ export interface MultiAnimationRenderPayload {
   canvas: CanvasConfig;
   duration: number;
   fps: 24 | 30 | 60;
+  jobId?: string;
 }
 
 export interface UploadResponse {

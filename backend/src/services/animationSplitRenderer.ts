@@ -29,6 +29,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { tmpPath } from './fileManager';
 import { captureFrameSequence, screenshotRenderState, closeBrowser } from './puppeteerRenderer';
 import { probeMedia, getCanvasSize, FFMPEG_THREADS } from './frameRenderer';
+import { setRenderProgress } from './renderProgressStore';
+import { timemarkToSeconds } from './progressUtil';
 import { computeItemGeometry } from '@mockup-forge/shared';
 import type {
   MultiAnimationRenderPayload, PuppeteerRenderState, PuppeteerItem,
@@ -134,6 +136,7 @@ export async function renderAnimationSplit(
   const frameDir = tmpPath(`frames_${uuidv4()}`);
   fs.mkdirSync(frameDir, { recursive: true });
 
+  setRenderProgress(payload.jobId, 0, 'capturing');
   if (splitFrame > 0) {
     const times = Array.from({ length: splitFrame }, (_, i) => i / fps);
     const baseState: PuppeteerRenderState = {
@@ -142,11 +145,15 @@ export async function renderAnimationSplit(
     console.log(`[split-anim] capturing ${splitFrame} animated frames…`);
     await captureFrameSequence(baseState, times, {
       frameDir, ext: 'jpg', quality: 95, concurrency: 1,
-      onProgress: (d, t) => console.log(`[split-anim] captured ${d}/${t} animated frames`),
+      onProgress: (d, t) => {
+        console.log(`[split-anim] captured ${d}/${t} animated frames`);
+        setRenderProgress(payload.jobId, (d / t) * 50, 'capturing');
+      },
       signal,
     });
   }
   signal?.throwIfAborted();
+  setRenderProgress(payload.jobId, 50, 'preparing');
 
   // ── 2. Bake static plates at the held state (time = splitTime) ──────────────
   const staticItems = items.filter((i) => !i.isVideo);
@@ -190,6 +197,7 @@ export async function renderAnimationSplit(
   // Rounded mask (skip when there's effectively no corner radius).
   await closeBrowser(); // free Chrome RAM before the encode
   const maskPath = radius > 0.5 ? tmpPath(await makeRoundedMask(dw, dh, radius)) : null;
+  setRenderProgress(payload.jobId, 55, 'encoding');
 
   // ── 4. Single FFmpeg pass: seg1 frames + seg2 composite → concat ────────────
   const r = fps > 0 && Number.isFinite(fps) ? fps.toFixed(3) : '30';
@@ -278,7 +286,15 @@ export async function renderAnimationSplit(
       .output(outputPath)
       .on('start',  (c)    => console.log('[split-anim]', c))
       .on('stderr', (line) => console.log('[split-anim]', line))
-      .on('end',    ()     => { signal?.removeEventListener('abort', onAbort); resolve(); })
+      .on('progress', (p: { timemark?: string }) => {
+        if (!p.timemark) return;
+        const pct = 55 + (timemarkToSeconds(p.timemark) / duration) * 45;
+        setRenderProgress(payload.jobId, Math.min(99, pct), 'encoding');
+      })
+      .on('end',    ()     => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      })
       .on('error',  (err: Error) => {
         signal?.removeEventListener('abort', onAbort);
         console.error('[split-anim error]', err.message);
