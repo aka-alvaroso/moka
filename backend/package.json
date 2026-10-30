@@ -11,7 +11,7 @@
   "dependencies": {
     "@mockup-forge/shared": "workspace:*",
     "cors": "^2.8.5",
-    "express": "^4.19.2",
+    "express": "^4.22.3",
     "express-rate-limit": "^8.5.2",
     "ffmpeg-static": "^5.3.0",
     "ffprobe-static": "^3.1.0",
@@ -19,7 +19,7 @@
     "helmet": "^8.2.0",
     "multer": "^1.4.5-lts.1",
     "puppeteer": "^25.0.4",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.5",
     "uuid": "^11.1.1"
   },
   "devDependencies": {
